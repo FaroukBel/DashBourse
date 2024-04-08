@@ -30,6 +30,7 @@ import Scrollbar from '../components/scrollbar';
 import { UserListHead, UserListToolbar } from '../sections/@dashboard/user';
 // mock
 import USERLIST from '../_mock/user';
+import { ProductSort, ProductFilterSidebar } from '../sections/@dashboard/products';
 
 // ----------------------------------------------------------------------
 
@@ -73,7 +74,7 @@ function applySortFilter(array, comparator, query) {
   return stabilizedThis.map((el) => el[0]);
 }
 
-export default function UserPage() {
+export default function HistoryPage() {
   const [open, setOpen] = useState(null);
 
   const [page, setPage] = useState(0);
@@ -145,6 +146,15 @@ export default function UserPage() {
   const filteredUsers = applySortFilter(USERLIST, getComparator(order, orderBy), filterName);
 
   const isNotFound = !filteredUsers.length && !!filterName;
+  const [openFilter, setOpenFilter] = useState(false);
+
+  const handleOpenFilter = () => {
+    setOpenFilter(true);
+  };
+
+  const handleCloseFilter = () => {
+    setOpenFilter(false);
+  };
 
   return (
     <>
@@ -154,18 +164,26 @@ export default function UserPage() {
 
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
-
           <Typography variant="h4" gutterBottom>
             Historique transactions
           </Typography>
-          <Stack direction={"row"} spacing={1}>
-
-          <Button variant="contained" startIcon={<Iconify icon="eva:plus-fill" />} style={{width:"100px"}}>
-            Achat
-          </Button>
-          <Button variant="contained" startIcon={<Iconify icon="eva:plus-fill" />} style={{width:"100px"}} color='error'>
-            Vente
-          </Button>
+          <Stack direction={'row'} spacing={1}>
+            <Button variant="contained" style={{ width: '100px' }}>
+              Achat
+            </Button>
+            <Button variant="contained" style={{ width: '100px' }} color="error">
+              Vente
+            </Button>
+          </Stack>
+        </Stack>
+        <Stack direction="row" flexWrap="wrap-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }}>
+          <Stack direction="row" spacing={1} flexShrink={0} sx={{ my: 1 }}>
+            <ProductFilterSidebar
+              openFilter={openFilter}
+              onOpenFilter={handleOpenFilter}
+              onCloseFilter={handleCloseFilter}
+            />
+            <ProductSort />
           </Stack>
         </Stack>
 

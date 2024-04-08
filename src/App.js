@@ -7,7 +7,7 @@ import ThemeProvider from './theme';
 // components
 import { StyledChart } from './components/chart';
 import ScrollToTop from './components/scroll-to-top';
-
+import { AuthContext } from './context/AuthContext';
 // ----------------------------------------------------------------------
 
 export default function App() {
@@ -16,8 +16,9 @@ export default function App() {
       <BrowserRouter>
         <ThemeProvider>
           <ScrollToTop />
-          <StyledChart />
-          <Router />
+          <AuthContext>
+            <Router />
+          </AuthContext>
         </ThemeProvider>
       </BrowserRouter>
     </HelmetProvider>

@@ -4,7 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { Link, Stack, IconButton, InputAdornment, TextField, Checkbox } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 // components
+import { tr } from 'date-fns/locale';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../../config/firebase-config';
 import Iconify from '../../../components/iconify';
+
 
 // ----------------------------------------------------------------------
 
@@ -14,9 +18,15 @@ export default function LoginForm() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleClick = () => {
-    
-    navigate('/dashboard', { replace: true });
+  const handleClick =async () => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user
+      console.log(user)
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      console.log(error)
+    }
   };
 
   return (
@@ -43,14 +53,12 @@ export default function LoginForm() {
       </Stack>
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ my: 2 }}>
-        <Checkbox name="remember" label="Remember me" />
-        <Link variant="subtitle2" underline="hover">
-          Forgot password?
-        </Link>
+        <Checkbox name="remember" label="Restez connecté" />
+        
       </Stack>
 
       <LoadingButton fullWidth size="large" type="submit" variant="contained" onClick={handleClick}>
-        Login
+        Crée un compte
       </LoadingButton>
     </>
   );

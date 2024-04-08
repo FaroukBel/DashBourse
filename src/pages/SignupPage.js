@@ -1,17 +1,18 @@
-import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 // @mui
 import { styled } from '@mui/material/styles';
 import { Link, Container, Typography, Divider, Stack, Button } from '@mui/material';
+// hooks
 import { signInWithPopup } from 'firebase/auth';
-
 import {auth,googleProvider} from '../config/firebase-config';
 import useResponsive from '../hooks/useResponsive';
 // components
 import Logo from '../components/logo';
 import Iconify from '../components/iconify';
 // sections
-import { LoginForm } from '../sections/auth/login';
+import { SignupForm } from '../sections/auth/signup';
+
 
 // ----------------------------------------------------------------------
 
@@ -43,10 +44,11 @@ const StyledContent = styled('div')(({ theme }) => ({
 
 // ----------------------------------------------------------------------
 
-export default function LoginPage() {
+export default function SignupPage() {
   const mdUp = useResponsive('up', 'md');
   const navigate = useNavigate();
-  const signInWithGoogle = async() => {
+
+  const signUpWithGoogle = async() => {
     try {
       const result = await signInWithPopup(auth, googleProvider)
 
@@ -62,7 +64,7 @@ export default function LoginPage() {
   return (
     <>
       <Helmet>
-        <title> Login | Minimal UI </title>
+        <title> Sign Up | DashBourse </title>
       </Helmet>
 
       <StyledRoot>
@@ -74,34 +76,33 @@ export default function LoginPage() {
           }}
         />
 
-       
-
+      
         <Container maxWidth="sm">
           <StyledContent>
             <Typography variant="h4" gutterBottom>
-              Sign in to Minimal
+              Crée un compte sur DashBourse
             </Typography>
 
             <Typography variant="body2" sx={{ mb: 5 }}>
-              Vous avez pas de compte? {''}
-              <Link variant="subtitle2" href='/sign-up'>Crée un</Link>
+              Vos avez déjà un compte ? &nbsp;
+              <Link variant="subtitle2" href='/login'>S'authentifier</Link>
             </Typography>
 
             <Stack direction="row" spacing={2}>
-              <Button fullWidth size="large" color="inherit" variant="outlined" onClick={signInWithGoogle}>
+              <Button fullWidth size="large" color="inherit" variant="outlined" onClick={signUpWithGoogle}>
                 <Iconify icon="eva:google-fill" color="#DF3E30" width={22} height={22} />
               </Button>
 
-            
+             
             </Stack>
 
             <Divider sx={{ my: 3 }}>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Ou
+               Ou
               </Typography>
             </Divider>
 
-            <LoginForm />
+            <SignupForm />
           </StyledContent>
         </Container>
       </StyledRoot>
