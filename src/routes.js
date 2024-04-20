@@ -4,7 +4,7 @@ import { Navigate, useRoutes } from 'react-router-dom';
 import DashboardLayout from './layouts/dashboard';
 import SimpleLayout from './layouts/simple';
 //
-import BlogPage from './pages/BlogPage';
+
 import LoginPage from './pages/LoginPage';
 import Page404 from './pages/Page404';
 import DashboardAppPage from './pages/DashboardAppPage';
@@ -13,6 +13,8 @@ import { Protected } from './pages/Protected';
 import { ProtectedLogin } from './pages/ProtectedLogin';
 import HistoryPage from './pages/HistoryPage';
 import TransactionsPage from './pages/TransactionsPage';
+import BankPage from './pages/BankPage';
+import BankTransactionsPage from './pages/BankTransactionsPage';
 
 // ----------------------------------------------------------------------
 
@@ -31,7 +33,8 @@ export default function Router() {
         { path: 'app', element: <DashboardAppPage /> },
         { path: 'history', element: <HistoryPage /> },
         { path: 'transactions', element: <TransactionsPage /> },
-        { path: 'blog', element: <BlogPage /> },
+        { path: 'bank-history', element: <BankPage /> },
+        { path: 'bank-ops', element: <BankTransactionsPage /> },
       ],
     },
     {

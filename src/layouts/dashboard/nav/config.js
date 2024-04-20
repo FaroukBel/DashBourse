@@ -3,38 +3,33 @@ import SvgColor from '../../../components/svg-color';
 
 // ----------------------------------------------------------------------
 
-const icon = (name) => <SvgColor src={`/assets/icons/navbar/${name}.svg`} sx={{ width: 1, height: 1 }} />;
+const icon = (name) => <SvgColor src={`/assets/icons/navbar/${name}.svg`}  sx={{ width: 1, height: 1 }} />;
 
 const navConfig = [
   {
-    title: 'dashboard',
+    title: 'Tableau de bord',
     path: '/dashboard/app',
     icon: icon('ic_analytics'),
   },
   {
     title: 'Historique',
     path: '/dashboard/history',
-    icon: icon('ic_user'),
+    icon: icon('ic_table'),
   },
   {
-    title: 'Transaction',
+    title: 'Operations',
     path: '/dashboard/transactions',
-    icon: icon('ic_cart'),
+    icon: icon('ic_transaction'),
   },
   {
-    title: 'blog',
-    path: '/dashboard/blog',
-    icon: icon('ic_blog'),
+    title: 'Historique Banque',
+    path: '/dashboard/bank-history',
+    icon: icon('ic_bank'),
   },
   {
-    title: 'login',
-    path: '/login',
-    icon: icon('ic_lock'),
-  },
-  {
-    title: 'Not found',
-    path: '/404',
-    icon: icon('ic_disabled'),
+    title: 'Operations Banque',
+    path: '/dashboard/bank-ops',
+    icon: icon('ic_money'),
   },
 ];
 

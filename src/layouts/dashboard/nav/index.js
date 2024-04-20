@@ -54,10 +54,19 @@ export default function Nav({ openNav, onCloseNav }) {
       }}
     >
       <Box sx={{ px: 2.5, py: 3, display: 'inline-flex' }}>
-        <Logo />
+        <Typography 
+          variant="h2" 
+          sx={{ color: 'text.primary', display: 'inline-flex', alignItems: 'center' }}
+          fontFamily={'Ubuntu'}
+          fontSize={'1.3rem'}
+          fontWeight={600}
+          style={{ letterSpacing: '-3px'}}
+        >
+          DashBourse
+        </Typography>
       </Box>
 
-      <Box sx={{ mb: 5, mx: 2.5 }}>
+      {/* <Box sx={{ mb: 5, mx: 2.5 }}>
         <Link underline="none">
           <StyledAccount>
             <Avatar src={account.photoURL} alt="photoURL" />
@@ -73,7 +82,7 @@ export default function Nav({ openNav, onCloseNav }) {
             </Box>
           </StyledAccount>
         </Link>
-      </Box>
+      </Box> */}
 
       <NavSection data={navConfig} />
 

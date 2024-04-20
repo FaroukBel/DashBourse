@@ -1,8 +1,10 @@
 import PropTypes from 'prop-types';
 // @mui
 import { styled, alpha } from '@mui/material/styles';
-import { Toolbar, Tooltip, IconButton, Typography, OutlinedInput, InputAdornment } from '@mui/material';
+import { Toolbar, Stack, Tooltip, IconButton, Typography, OutlinedInput, InputAdornment } from '@mui/material';
 // component
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import Iconify from '../../../components/iconify';
 
 // ----------------------------------------------------------------------
@@ -36,9 +38,18 @@ UserListToolbar.propTypes = {
   numSelected: PropTypes.number,
   filterName: PropTypes.string,
   onFilterName: PropTypes.func,
+
+  onBeginDateChange: PropTypes.func,
+  onFinishedDateChange: PropTypes.func,
 };
 
-export default function UserListToolbar({ numSelected, filterName, onFilterName }) {
+export default function UserListToolbar({
+  numSelected,
+  filterName,
+  onFilterName,
+  onBeginDateChange,
+  onFinishedDateChange,
+}) {
   return (
     <StyledRoot
       sx={{
@@ -53,16 +64,19 @@ export default function UserListToolbar({ numSelected, filterName, onFilterName 
           {numSelected} selected
         </Typography>
       ) : (
-        <StyledSearch
-          value={filterName}
-          onChange={onFilterName}
-          placeholder="Search user..."
-          startAdornment={
-            <InputAdornment position="start">
-              <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled', width: 20, height: 20 }} />
-            </InputAdornment>
-          }
-        />
+        <Stack direction={'row'} spacing={3}>
+       
+          <StyledSearch
+            value={filterName}
+            onChange={onFilterName}
+            placeholder="Search user..."
+            startAdornment={
+              <InputAdornment position="start">
+                <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled', width: 20, height: 20 }} />
+              </InputAdornment>
+            }
+          />
+        </Stack>
       )}
 
       {numSelected > 0 ? (

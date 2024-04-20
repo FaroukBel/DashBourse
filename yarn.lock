@@ -2108,6 +2108,13 @@
   resolved "https://registry.npmjs.org/@mui/core-downloads-tracker/-/core-downloads-tracker-5.15.15.tgz"
   integrity sha512-aXnw29OWQ6I5A47iuWEI6qSSUfH6G/aCsW9KmW3LiFqr7uXZBK4Ks+z8G+qeIub8k0T5CMqlT2q0L+ZJTMrqpg==
 
+"@mui/icons-material@^5.15.15":
+  version "5.15.15"
+  resolved "https://registry.npmjs.org/@mui/icons-material/-/icons-material-5.15.15.tgz"
+  integrity sha512-kkeU/pe+hABcYDH6Uqy8RmIsr2S/y5bP2rp+Gat4CcRjCcVne6KudS1NrZQhUCRysrTDCAhcbcf9gt+/+pGO2g==
+  dependencies:
+    "@babel/runtime" "^7.23.9"
+
 "@mui/lab@^5.0.0-alpha.103":
   version "5.0.0-alpha.103"
   resolved "https://registry.npmjs.org/@mui/lab/-/lab-5.0.0-alpha.103.tgz"
@@ -9413,6 +9420,11 @@ svgo@^2.7.0:
     csso "^4.2.0"
     picocolors "^1.0.0"
     stable "^0.1.8"
+
+sweetalert2@^11.10.7:
+  version "11.10.7"
+  resolved "https://registry.npmjs.org/sweetalert2/-/sweetalert2-11.10.7.tgz"
+  integrity sha512-5Jlzrmaitay6KzU+2+LhYu9q+L4v/dZ8oZyEDH14ep0C/QilCnFLHmqAyD/Lhq/lm5DiwsOs6Tr58iv8k3wyGg==
 
 symbol-tree@^3.2.4:
   version "3.2.4"

@@ -1,7 +1,12 @@
 import { Helmet } from 'react-helmet-async';
 import { filter } from 'lodash';
 import { sentenceCase } from 'change-case';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import dayjs from 'dayjs';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers';
+
 // @mui
 import {
   Card,
@@ -9,6 +14,9 @@ import {
   Stack,
   Paper,
   Avatar,
+  FormControl,
+  InputLabel,
+  Select,
   Button,
   Popover,
   Checkbox,
@@ -21,9 +29,11 @@ import {
   IconButton,
   TableContainer,
   TablePagination,
+  TextField,
 } from '@mui/material';
 // components
-import Label from '../components/label';
+import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { titres } from '../utils/titres';
 import Iconify from '../components/iconify';
 import Scrollbar from '../components/scrollbar';
 // sections
@@ -31,15 +41,21 @@ import { UserListHead, UserListToolbar } from '../sections/@dashboard/user';
 // mock
 import USERLIST from '../_mock/user';
 import { ProductSort, ProductFilterSidebar } from '../sections/@dashboard/products';
+import { db } from '../config/firebase-config';
 
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
-  { id: 'name', label: 'Name', alignRight: false },
-  { id: 'company', label: 'Company', alignRight: false },
-  { id: 'role', label: 'Role', alignRight: false },
-  { id: 'isVerified', label: 'Verified', alignRight: false },
-  { id: 'status', label: 'Status', alignRight: false },
+  { id: 'date', label: 'Date', alignRight: false },
+  { id: 'type', label: 'Type', alignRight: false },
+  { id: 'societe', label: 'Societé', alignRight: false },
+  { id: 'cours', label: 'Cours', alignRight: false },
+  { id: 'qte', label: 'Quantité', alignRight: false },
+  { id: 'brut', label: 'Brut', alignRight: false },
+  { id: 'commision', label: 'Commission', alignRight: false },
+  { id: 'net', label: 'Net', alignRight: false },
+  { id: 'bank', label: 'Banque', alignRight: false },
+  { id: 'bankDiff', label: 'Banque Diff', alignRight: false },
   { id: '' },
 ];
 
@@ -89,6 +105,45 @@ export default function HistoryPage() {
 
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
+  const [transactions, setTransactions] = useState([]);
+
+  const [filteredTransactions, setFilteredTransactions] = useState([]);
+
+  const [beginFilterDate, setBeginFilterDate] = useState(null);
+
+  const [finishFilterDate, setFinishFilterDate] = useState(null);
+
+  const [selectedSocieteFiltre, setSelectedSocieteFiltre] = useState('Titre');
+
+  const [selectedService, setSelectedService] = useState('');
+
+  const [selectedAv, setSelectedAv] = useState('Achat');
+
+  const listTransactionRef = collection(db, 'Transactions');
+  const [bankValues, setBankValues] = useState({});
+
+  const handleBankChange = (event, id) => {
+    const { value } = event.target;
+    setBankValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+
+  const getTransactionsList = async () => {
+    const transactionSnapshot = await getDocs(listTransactionRef);
+
+    const transactionListData = transactionSnapshot.docs.map((doc) => ({
+      ...doc.data(),
+      id: doc.id,
+    }));
+    setFilteredTransactions(transactionListData);
+    setTransactions(transactionListData);
+  };
+  useEffect(() => {
+    getTransactionsList();
+  }, []);
+
   const handleOpenMenu = (event) => {
     setOpen(event.currentTarget);
   };
@@ -111,6 +166,31 @@ export default function HistoryPage() {
     }
     setSelected([]);
   };
+  const filteredData = useMemo(() => {
+    const beginTimestamp = new Date(beginFilterDate).getTime();
+    const finishTimestamp = new Date(finishFilterDate).getTime();
+    // Filtering logic based on all filter parameters
+    return transactions.filter((item) => {
+      // Example: Filter based on begin date
+      if (beginFilterDate && item.date.seconds * 1000 < beginTimestamp) {
+        return false;
+      }
+      // Example: Filter based on finish date
+      if (finishFilterDate && item.date.seconds * 1000 > finishTimestamp) {
+        return false;
+      }
+      // Example: Filter based on selected titre
+      if (selectedSocieteFiltre !== 'Titre' && item.titre !== selectedSocieteFiltre) {
+        return false;
+      }
+      // Example: Filter based on selected type
+      if (selectedService && item.type !== selectedService.toLowerCase()) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [transactions, beginFilterDate, finishFilterDate, selectedSocieteFiltre, selectedAv, selectedService]);
 
   const handleClick = (event, name) => {
     const selectedIndex = selected.indexOf(name);
@@ -136,25 +216,11 @@ export default function HistoryPage() {
     setRowsPerPage(parseInt(event.target.value, 10));
   };
 
-  const handleFilterByName = (event) => {
-    setPage(0);
-    setFilterName(event.target.value);
-  };
-
   const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - USERLIST.length) : 0;
 
   const filteredUsers = applySortFilter(USERLIST, getComparator(order, orderBy), filterName);
 
   const isNotFound = !filteredUsers.length && !!filterName;
-  const [openFilter, setOpenFilter] = useState(false);
-
-  const handleOpenFilter = () => {
-    setOpenFilter(true);
-  };
-
-  const handleCloseFilter = () => {
-    setOpenFilter(false);
-  };
 
   return (
     <>
@@ -167,28 +233,117 @@ export default function HistoryPage() {
           <Typography variant="h4" gutterBottom>
             Historique transactions
           </Typography>
-          <Stack direction={'row'} spacing={1}>
-            <Button variant="contained" style={{ width: '100px' }}>
-              Achat
-            </Button>
-            <Button variant="contained" style={{ width: '100px' }} color="error">
-              Vente
-            </Button>
-          </Stack>
-        </Stack>
-        <Stack direction="row" flexWrap="wrap-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }}>
-          <Stack direction="row" spacing={1} flexShrink={0} sx={{ my: 1 }}>
-            <ProductFilterSidebar
-              openFilter={openFilter}
-              onOpenFilter={handleOpenFilter}
-              onCloseFilter={handleCloseFilter}
-            />
-            <ProductSort />
-          </Stack>
         </Stack>
 
         <Card>
-          <UserListToolbar numSelected={selected.length} filterName={filterName} onFilterName={handleFilterByName} />
+          <Stack direction={'row'} spacing={3} margin={3}>
+            {selected.length > 0 ? (
+              <IconButton
+                onClick={() => {
+                  selected.map(async (id) => {
+                    await deleteDoc(doc(db, 'bank_transactions', id));
+                  });
+                  getTransactionsList();
+                }}
+              >
+                <Iconify icon="eva:trash-2-fill" />
+              </IconButton>
+            ) : (
+              <IconButton
+                onClick={() => {
+                  setFilteredTransactions(transactions);
+                  setBeginFilterDate(null);
+                  setFinishFilterDate(null);
+                  setSelectedSocieteFiltre('Titre');
+                  setSelectedService('');
+                }}
+              >
+                <Iconify icon="ic:round-clear" />
+              </IconButton>
+            )}
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DatePicker
+                label="Date de debut"
+                disableFuture
+                className="bg-white"
+                format="DD-MM-YYYY"
+                maxDate={finishFilterDate}
+                onChange={(newValue) => {
+                  setBeginFilterDate(newValue);
+                }}
+              />
+            </LocalizationProvider>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DatePicker
+                label="Date de fin"
+                disableFuture
+                className="bg-white"
+                format="DD-MM-YYYY"
+                defaultValue={dayjs(new Date())}
+                minDate={beginFilterDate}
+                onChange={(newValue) => {
+                  setFinishFilterDate(newValue);
+                }}
+              />
+            </LocalizationProvider>
+
+            <FormControl fullWidth>
+              <InputLabel id="select-titre-label">Titre</InputLabel>
+
+              <Select
+                labelId="select-titre-label"
+                label="Titre"
+                variant="outlined"
+                size="medium"
+                value={selectedSocieteFiltre}
+                onChange={(event) => setSelectedSocieteFiltre(event.target.value)}
+              >
+                {titres.map((option, index) => (
+                  <MenuItem key={index} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+          <Stack direction="row-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }} marginX={5}>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant={selectedService === 'Achat' ? 'contained' : 'outlined'}
+                onClick={() => {
+                  if (selectedService !== 'Achat') setSelectedService('Achat');
+                }}
+              >
+                Achat
+              </Button>
+              <Button
+                variant={selectedService === 'Vente' ? 'contained' : 'outlined'}
+                onClick={() => {
+                  if (selectedService !== 'Vente') setSelectedService('Vente');
+                }}
+              >
+                Vente
+              </Button>
+
+              <Button
+                variant={selectedService === 'Dividende' ? 'contained' : 'outlined'}
+                onClick={() => {
+                  if (selectedService !== 'Dividende') setSelectedService('Dividende');
+                }}
+              >
+                Dividende
+              </Button>
+              <Button
+                variant={selectedService === 'Introduction' ? 'contained' : 'outlined'}
+                onClick={() => {
+                  if (selectedService !== 'Introduction') setSelectedService('Introduction');
+                }}
+              >
+                Introduction
+              </Button>
+              <Button variant={selectedService === 'tax' ? 'contained' : 'outlined'}>Tax Immobiliere</Button>
+            </Stack>
+          </Stack>
 
           <Scrollbar>
             <TableContainer sx={{ minWidth: 800 }}>
@@ -197,40 +352,75 @@ export default function HistoryPage() {
                   order={order}
                   orderBy={orderBy}
                   headLabel={TABLE_HEAD}
-                  rowCount={USERLIST.length}
+                  rowCount={filteredData.length}
                   numSelected={selected.length}
                   onRequestSort={handleRequestSort}
                   onSelectAllClick={handleSelectAllClick}
                 />
                 <TableBody>
-                  {filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((row) => {
-                    const { id, name, role, status, company, avatarUrl, isVerified } = row;
-                    const selectedUser = selected.indexOf(name) !== -1;
+                  {filteredData.map((row) => {
+                    const { id, date, titre, prix, quantite, type } = row;
+                    const selectedUser = selected.indexOf(id) !== -1;
+                    const milliseconds = date.seconds * 1000;
 
+                    // Create a new Date object
+                    const dateMili = new Date(milliseconds);
+
+                    // Extract date components
+                    const day = dateMili.getDate();
+                    const month = dateMili.getMonth() + 1; // Months are zero-based, so January is 0
+                    const year = dateMili.getFullYear();
+
+                    // Format the date as a French date string
+                    const frenchDate = `${day}/${month}/${year}`;
+
+                    const diffBank = (
+                      bankValues[id] -
+                      (type === 'achat'
+                        ? prix * quantite + quantite * prix * 0.0044
+                        : prix * quantite - quantite * prix * 0.0044)
+                    ).toFixed(2);
                     return (
                       <TableRow hover key={id} tabIndex={-1} role="checkbox" selected={selectedUser}>
                         <TableCell padding="checkbox">
-                          <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, name)} />
+                          <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
                         </TableCell>
+
+                        <TableCell align="left">{frenchDate}</TableCell>
+                        <TableCell
+                          align="left"
+                          style={type === 'achat' ? { backgroundColor: '#b6ff8f' } : { backgroundColor: '#ff9b9b' }}
+                        >
+                          {type.toUpperCase()}
+                        </TableCell>
+                        <TableCell align="left">{titre}</TableCell>
 
                         <TableCell component="th" scope="row" padding="none">
                           <Stack direction="row" alignItems="center" spacing={2}>
-                            <Avatar alt={name} src={avatarUrl} />
                             <Typography variant="subtitle2" noWrap>
-                              {name}
+                              {prix}
                             </Typography>
                           </Stack>
                         </TableCell>
 
-                        <TableCell align="left">{company}</TableCell>
+                        <TableCell align="left">{quantite}</TableCell>
+                        <TableCell align="left">{quantite * prix}</TableCell>
+                        <TableCell align="left">{(prix * quantite * 0.0044).toFixed(2)}</TableCell>
 
-                        <TableCell align="left">{role}</TableCell>
-
-                        <TableCell align="left">{isVerified ? 'Yes' : 'No'}</TableCell>
+                        <TableCell align="left">
+                          {type === 'achat'
+                            ? (prix * quantite + quantite * prix * 0.0044).toFixed(2)
+                            : (prix * quantite - quantite * prix * 0.0044).toFixed(2)}
+                        </TableCell>
+                        <TableCell align="left">
+                          <TextField type={'number'} onChange={(event) => handleBankChange(event, id)} />
+                        </TableCell>
+                        <TableCell align="left">{diffBank}</TableCell>
+                        {/* <TableCell align="left">{isVerified ? 'Yes' : 'No'}</TableCell>
 
                         <TableCell align="left">
                           <Label color={(status === 'banned' && 'error') || 'success'}>{sentenceCase(status)}</Label>
-                        </TableCell>
+                        </TableCell> */}
 
                         <TableCell align="right">
                           <IconButton size="large" color="inherit" onClick={handleOpenMenu}>
@@ -272,6 +462,46 @@ export default function HistoryPage() {
                 )}
               </Table>
             </TableContainer>
+            <Stack direction={'row'} spacing={3} marginTop={3}>
+              <Stack direction={'column'}>
+                <TextField
+                  label="Total"
+                  value={filteredData
+                    .map((row) =>
+                      row.type === 'achat'
+                        ? row.prix * row.quantite + row.quantite * row.prix * 0.0044
+                        : row.prix * row.quantite - row.quantite * row.prix * 0.0044
+                    )
+                    .reduce((a, b) => a + b, 0)
+                    .toFixed(2)}
+                />
+              </Stack>
+              <Stack direction={'column'}>
+                <TextField
+                  label="Total commision"
+                  value={filteredData
+                    .map((row) => row.quantite * row.prix * 0.0044)
+                    .reduce((a, b) => a + b, 0)
+                    .toFixed(2)}
+                />
+              </Stack>
+              <Stack direction={'column'}>
+                <TextField
+                  label="Total Diff. Sys/Banque"
+                  value={filteredData
+                    .map((row) => {
+                      const bankValue = Number.isNaN(bankValues[row.id]) ? 0 : bankValues[row.id];
+                      const transactionValue =
+                        row.type === 'achat'
+                          ? row.prix * row.quantite + row.quantite * row.prix * 0.0044
+                          : row.prix * row.quantite - row.quantite * row.prix * 0.0044;
+                      return bankValue - transactionValue;
+                    })
+                    .reduce((a, b) => a + b, 0)
+                    .toFixed(2)}
+                />
+              </Stack>
+            </Stack>
           </Scrollbar>
 
           <TablePagination
@@ -306,12 +536,17 @@ export default function HistoryPage() {
       >
         <MenuItem>
           <Iconify icon={'eva:edit-fill'} sx={{ mr: 2 }} />
-          Edit
+          Modifier
         </MenuItem>
 
-        <MenuItem sx={{ color: 'error.main' }}>
+        <MenuItem
+          sx={{ color: 'error.main' }}
+          onClick={() => {
+            console.log('selected', selected);
+          }}
+        >
           <Iconify icon={'eva:trash-2-outline'} sx={{ mr: 2 }} />
-          Delete
+          Suprimer
         </MenuItem>
       </Popover>
     </>
