@@ -1,8 +1,9 @@
 import PropTypes from 'prop-types';
+import { useState } from 'react';
 import ReactApexChart from 'react-apexcharts';
 // @mui
 import { useTheme, styled } from '@mui/material/styles';
-import { Card, CardHeader } from '@mui/material';
+import { Button, Card, CardHeader, Stack } from '@mui/material';
 // utils
 import { fNumber } from '../../../utils/formatNumber';
 // components
@@ -36,11 +37,12 @@ AppCurrentVisits.propTypes = {
   subheader: PropTypes.string,
   chartColors: PropTypes.arrayOf(PropTypes.string),
   chartData: PropTypes.array,
+  handleCompChange: PropTypes.func,
 };
 
-export default function AppCurrentVisits({ title, subheader, chartColors, chartData, ...other }) {
+export default function AppCurrentVisits({ title, subheader, chartColors, chartData, handleCompChange, ...other }) {
   const theme = useTheme();
-
+  const [comp, setComp] = useState('Nbr. Action');
   const chartLabels = chartData.map((i) => i.label);
 
   const chartSeries = chartData.map((i) => i.value);
@@ -68,7 +70,26 @@ export default function AppCurrentVisits({ title, subheader, chartColors, chartD
   return (
     <Card {...other}>
       <CardHeader title={title} subheader={subheader} />
-
+      <Stack direction={'row'} spacing={1} marginX={2} marginTop={2}>
+        <Button
+          onClick={() => {
+            handleCompChange('Nbr. Action');
+            setComp('Nbr. Action');
+          }}
+          variant={comp === 'Nbr. Action' ? 'contained' : 'outlined'}
+        >
+          Nbr. Action
+        </Button>
+        <Button
+          onClick={() => {
+            handleCompChange('+Value');
+            setComp('+Value');
+          }}
+          variant={comp === '+Value' ? 'contained' : 'outlined'}
+        >
+          +Value
+        </Button>
+      </Stack>
       <StyledChartWrapper dir="ltr">
         <ReactApexChart type="pie" series={chartSeries} options={chartOptions} height={280} />
       </StyledChartWrapper>

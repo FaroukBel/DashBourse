@@ -32,6 +32,7 @@ export const titres = [
   'Fenie Brossette',
   'Hps',
   'IB Maroc Com',
+  'Introduction en Bourse',
   'Immorente Invest',
   'Involys',
   'Itissalat Al-Maghrib',

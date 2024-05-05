@@ -20,8 +20,10 @@ import { titres } from '../../utils/titres';
 import { db } from '../../config/firebase-config';
 
 export const VenteCard = () => {
-  const [prixVente, setPrixVente] = useState(0);
-  const [quantiteVente, setQuantiteVente] = useState(0);
+  const quantiteRef = React.useRef();
+  const prixRef = React.useRef();
+  const [prixVente, setPrixVente] = useState('');
+  const [quantiteVente, setQuantiteVente] = useState('');
   const [commissionVente, setCommissionVente] = useState(0);
   const [totalVente, setTotalVente] = useState(0);
   const [totalCommissionVente, setTotalCommissionVente] = useState(0);
@@ -94,7 +96,14 @@ export const VenteCard = () => {
             <FormControl fullWidth fullheight>
               <InputLabel id="select-titre-label">Titre</InputLabel>
 
-              <Select labelId="select-titre-label" label="Titre" variant="outlined" size="medium">
+              <Select
+                labelId="select-titre-label"
+                label="Titre"
+                variant="outlined"
+                size="medium"
+                value={selectedTitre}
+                onChange={(e) => setSelectedTitre(e.target.value)}
+              >
                 {titres.map((option, index) => (
                   <MenuItem key={index} value={option}>
                     {option}
@@ -113,27 +122,43 @@ export const VenteCard = () => {
                 className="bg-white"
                 name="birthDate"
                 format="DD-MM-YYYY"
+                onChange={(newValue) => {
+                  setDateVente(newValue);
+                  prixRef.current.focus();
+                }}
               />
             </LocalizationProvider>
           </Stack>
           <Stack direction={'row'} spacing={2}>
             <TextField
               fullWidth
-              label="Prix de vente"
-              type="number"
-              variant="outlined"
-              size="medium"
-              value={prixVente}
-              onChange={handleVenteChange}
-            />
-            <TextField
-              fullWidth
+              inputRef={quantiteRef}
               label="Quantite"
               type="number"
               variant="outlined"
               size="medium"
               value={quantiteVente}
               onChange={handleQuantiteVenteChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleVenteSubmit();
+                }
+              }}
+            />
+            <TextField
+              fullWidth
+              inputRef={prixRef}
+              label="Prix de vente"
+              type="number"
+              variant="outlined"
+              size="medium"
+              value={prixVente}
+              onChange={handleVenteChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  quantiteRef.current.focus();
+                }
+              }}
             />
           </Stack>
           <Stack direction={'row'} spacing={2}>

@@ -16,14 +16,15 @@ export default function TransactionsPage() {
   return (
     <>
       <Helmet>
-        <title> Dashboard: Products | Minimal UI </title>
+        <title> Operations </title>
       </Helmet>
 
       <Container fullWidth maxWidth="xl" sx={{ mt: 3 }}>
-        <Typography variant="h4" sx={{ mb: 5 }}>
-          Operations
-        </Typography>
-
+        <Stack direction="row" alignItems="center" justifyContent="center" mb={5} fullWidth>
+          <Typography fontSize={39} sx={{ mb: 5 }}>
+            Operations
+          </Typography>
+        </Stack>
         <Stack direction="row" flexWrap="wrap-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }}>
           <Stack direction="row" spacing={1} flexShrink={0}>
             {/* <ProductFilterSidebar
@@ -63,9 +64,6 @@ export default function TransactionsPage() {
             <Stack direction="row" spacing={3} fullwidth>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} width={'100%'}>
                 <AchatCard />
-              </Stack>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} width={'100%'}>
-                <VenteCard />
               </Stack>
             </Stack>
           )}

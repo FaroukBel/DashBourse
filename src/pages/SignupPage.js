@@ -55,7 +55,6 @@ export default function SignupPage() {
       const user = result.user;
     navigate('/dashboard', { replace: true });
 
-      console.log(user)
     }
     catch (error) {
       console.log(error)
@@ -64,7 +63,7 @@ export default function SignupPage() {
   return (
     <>
       <Helmet>
-        <title> Sign Up | DashBourse </title>
+        <title> S'inscrire </title>
       </Helmet>
 
       <StyledRoot>

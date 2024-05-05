@@ -1,17 +1,18 @@
 import { Helmet } from 'react-helmet-async';
-import { filter } from 'lodash';
+import { filter, set } from 'lodash';
 import { sentenceCase } from 'change-case';
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers';
-
+import Swal from 'sweetalert2';
 // @mui
 import {
   Card,
   Table,
   Stack,
+  Alert,
   Paper,
   Avatar,
   FormControl,
@@ -30,16 +31,17 @@ import {
   TableContainer,
   TablePagination,
   TextField,
+  Divider,
 } from '@mui/material';
 // components
-import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { titres } from '../utils/titres';
 import Iconify from '../components/iconify';
 import Scrollbar from '../components/scrollbar';
 // sections
 import { UserListHead, UserListToolbar } from '../sections/@dashboard/user';
 // mock
-import USERLIST from '../_mock/user';
+
 import { ProductSort, ProductFilterSidebar } from '../sections/@dashboard/products';
 import { db } from '../config/firebase-config';
 
@@ -47,18 +49,28 @@ import { db } from '../config/firebase-config';
 
 const TABLE_HEAD = [
   { id: 'date', label: 'Date', alignRight: false },
-  { id: 'type', label: 'Type', alignRight: false },
   { id: 'societe', label: 'Societé', alignRight: false },
-  { id: 'cours', label: 'Cours', alignRight: false },
-  { id: 'qte', label: 'Quantité', alignRight: false },
-  { id: 'brut', label: 'Brut', alignRight: false },
-  { id: 'commision', label: 'Commission', alignRight: false },
-  { id: 'net', label: 'Net', alignRight: false },
-  { id: 'bank', label: 'Banque', alignRight: false },
-  { id: 'bankDiff', label: 'Banque Diff', alignRight: false },
+  { id: 'cours', label: 'Achat', alignRight: false },
+  { id: 'qte', label: 'Vente', alignRight: false },
+  { id: 'brut', label: 'Quantite', alignRight: false },
+  { id: 'commAchat', label: 'Comm/Achat', alignRight: false },
+  { id: 'commVente', label: 'Comm/Vente', alignRight: false },
+
+  { id: 'pnl', label: '+/- Value', alignRight: false },
   { id: '' },
 ];
 
+const TABLE_HEAD_DIVIDENDE = [
+  { id: 'date', label: 'Date', alignRight: false },
+  { id: 'datePaiement', label: 'Date Paiement', alignRight: false },
+  { id: 'societe', label: 'Societé', alignRight: false },
+  { id: 'cours', label: 'Cours', alignRight: false },
+  { id: 'brut', label: 'Quantite', alignRight: false },
+  { id: 'commAchat', label: 'IGR', alignRight: false },
+
+  { id: 'pnl', label: '+/- Value', alignRight: false },
+  { id: '' },
+];
 // ----------------------------------------------------------------------
 
 function descendingComparator(a, b, orderBy) {
@@ -110,21 +122,48 @@ export default function HistoryPage() {
   const [filteredTransactions, setFilteredTransactions] = useState([]);
 
   const [beginFilterDate, setBeginFilterDate] = useState(null);
+  const [total, setTotal] = useState(0);
 
   const [finishFilterDate, setFinishFilterDate] = useState(null);
 
   const [selectedSocieteFiltre, setSelectedSocieteFiltre] = useState('Titre');
 
   const [selectedService, setSelectedService] = useState('');
-
+  const [rowToEdit, setRowToEdit] = useState([]);
   const [selectedAv, setSelectedAv] = useState('Achat');
-
+  const [isDifferentSociete, setIsDifferentSociete] = useState(false);
   const listTransactionRef = collection(db, 'Transactions');
   const [bankValues, setBankValues] = useState({});
+  const [prixValues, setPrixValues] = useState({});
+  const [prixValuesVente, setPrixValuesVente] = useState({});
+  const [quantiteValues, setQuantiteValues] = useState({});
 
   const handleBankChange = (event, id) => {
     const { value } = event.target;
     setBankValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+
+  const handlePrixChange = (event, id) => {
+    const { value } = event.target;
+    setPrixValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+
+  const handlePrixVente = (event, id) => {
+    const { value } = event.target;
+    setPrixValuesVente((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+  const handleQuantiteChange = (event, id) => {
+    const { value } = event.target;
+    setQuantiteValues((prevState) => ({
       ...prevState,
       [id]: value,
     }));
@@ -139,6 +178,33 @@ export default function HistoryPage() {
     }));
     setFilteredTransactions(transactionListData);
     setTransactions(transactionListData);
+
+    setPrixValues(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.prixAchat;
+        return acc;
+      }, {})
+    );
+
+    setPrixValuesVente(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.prixVente;
+        return acc;
+      }, {})
+    );
+    setQuantiteValues(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.quantite;
+        return acc;
+      }, {})
+    );
+
+    setBankValues(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.bank || 0;
+        return acc;
+      }, {})
+    );
   };
   useEffect(() => {
     getTransactionsList();
@@ -157,10 +223,9 @@ export default function HistoryPage() {
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
   };
-
   const handleSelectAllClick = (event) => {
     if (event.target.checked) {
-      const newSelecteds = USERLIST.map((n) => n.name);
+      const newSelecteds = transactions.map((n) => n.id);
       setSelected(newSelecteds);
       return;
     }
@@ -172,11 +237,18 @@ export default function HistoryPage() {
     // Filtering logic based on all filter parameters
     return transactions.filter((item) => {
       // Example: Filter based on begin date
-      if (beginFilterDate && item.date.seconds * 1000 < beginTimestamp) {
+      // Example: Filter based on begin date
+      if (
+        beginFilterDate &&
+        (item.date?.seconds * 1000 < beginTimestamp || item.dateEngagement?.seconds * 1000 < beginTimestamp)
+      ) {
         return false;
       }
       // Example: Filter based on finish date
-      if (finishFilterDate && item.date.seconds * 1000 > finishTimestamp) {
+      if (
+        finishFilterDate &&
+        (item.date?.seconds * 1000 > finishTimestamp || item.dateEngagement?.seconds * 1000 > finishTimestamp)
+      ) {
         return false;
       }
       // Example: Filter based on selected titre
@@ -192,11 +264,11 @@ export default function HistoryPage() {
     });
   }, [transactions, beginFilterDate, finishFilterDate, selectedSocieteFiltre, selectedAv, selectedService]);
 
-  const handleClick = (event, name) => {
-    const selectedIndex = selected.indexOf(name);
+  const handleClick = (event, id) => {
+    const selectedIndex = selected.indexOf(id);
     let newSelected = [];
     if (selectedIndex === -1) {
-      newSelected = newSelected.concat(selected, name);
+      newSelected = newSelected.concat(selected, id);
     } else if (selectedIndex === 0) {
       newSelected = newSelected.concat(selected.slice(1));
     } else if (selectedIndex === selected.length - 1) {
@@ -204,6 +276,7 @@ export default function HistoryPage() {
     } else if (selectedIndex > 0) {
       newSelected = newSelected.concat(selected.slice(0, selectedIndex), selected.slice(selectedIndex + 1));
     }
+
     setSelected(newSelected);
   };
 
@@ -216,21 +289,85 @@ export default function HistoryPage() {
     setRowsPerPage(parseInt(event.target.value, 10));
   };
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - USERLIST.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - transactions.length) : 0;
 
-  const filteredUsers = applySortFilter(USERLIST, getComparator(order, orderBy), filterName);
+  const filteredUsers = applySortFilter(transactions, getComparator(order, orderBy), filterName);
 
   const isNotFound = !filteredUsers.length && !!filterName;
 
+  const calculateTransactionValue = (row) => {
+    if (row.type === 'achat') {
+      return row.prix * row.quantite + row.quantite * row.prix * 0.0044;
+    }
+    if (row.type === 'vente') {
+      return row.prix * row.quantite - row.quantite * row.prix * 0.0044;
+    }
+    return 0;
+  };
+
+  const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte } = filteredData.reduce(
+    (acc, value) => {
+      acc.totalAchat += value.prixAchat * value.quantite + value.quantite * value.prixAchat * 0.0044;
+      acc.totalDiv += value.prix * value.quantite;
+      acc.totalDivQte += Number(value.quantite);
+      acc.totalVente += value.prixVente * value.quantite - value.quantite * value.prixVente * 0.0044;
+      acc.totalQuantite += Number(value.quantite);
+      return acc;
+    },
+    { totalAchat: 0, totalVente: 0, totalQuantite: 0, totalDiv: 0, totalDivQte: 0 }
+  );
+
+  const totalTVA = ((totalVente - totalAchat) * 0.15).toFixed(2);
+  const totalPL = (totalVente - totalAchat - (totalVente - totalAchat) * 0.15).toFixed(2);
+  const igrDividende = (totalDiv * 0.15).toFixed(2);
+  const totalDividende = totalDiv.toFixed(2);
+
+  const totalBrutFilteredData = filteredData
+    .reduce((acc, row) => {
+      const transactionValue = calculateTransactionValue(row);
+      return acc + transactionValue;
+    }, 0)
+    .toFixed(2);
+
+  let totalBrut;
+
+  if (selected.length === 0) {
+    totalBrut = totalBrutFilteredData;
+  } else {
+    totalBrut = selected
+      .reduce((acc, value) => {
+        const transaction = transactions.find((transaction) => transaction.id === value);
+        const transactionValue = calculateTransactionValue(transaction);
+        return acc + transactionValue;
+      }, 0)
+      .toFixed(2);
+  }
+
+  const dateFrench = (date) => {
+    const milliseconds = date ? date.seconds * 1000 : null;
+
+    // Create a new Date object
+    const dateMili = new Date(milliseconds);
+
+    // Extract date components
+    const day = dateMili.getDate();
+    const month = dateMili.getMonth() + 1; // Months are zero-based, so January is 0
+    const year = dateMili.getFullYear();
+
+    // Format the date as a French date string
+    const frenchDate = `${day}/${month}/${year}`;
+
+    return frenchDate;
+  };
   return (
     <>
       <Helmet>
-        <title> User | Minimal UI </title>
+        <title> Historique </title>
       </Helmet>
 
       <Container>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
-          <Typography variant="h4" gutterBottom>
+        <Stack direction="row" alignItems="center" justifyContent="center" mb={5} fullWidth>
+          <Typography fontSize={39} gutterBottom>
             Historique transactions
           </Typography>
         </Stack>
@@ -240,10 +377,24 @@ export default function HistoryPage() {
             {selected.length > 0 ? (
               <IconButton
                 onClick={() => {
-                  selected.map(async (id) => {
-                    await deleteDoc(doc(db, 'bank_transactions', id));
+                  Swal.fire({
+                    title: 'Êtes-vous sûr(e) ?',
+                    text: 'Vous êtes sur le point de supprimer les transactions sélectionnées.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Oui, supprimer !',
+                    cancelButtonText: 'Annuler',
+                  }).then(async (result) => {
+                    if (result.isConfirmed) {
+                      selected.map(async (id) => {
+                        await deleteDoc(doc(db, 'Transactions', id));
+                      });
+                      getTransactionsList();
+                      Swal.fire('Supprimé !', 'Les transactions sélectionnées ont été supprimées.', 'success');
+                    }
                   });
-                  getTransactionsList();
                 }}
               >
                 <Iconify icon="eva:trash-2-fill" />
@@ -309,22 +460,13 @@ export default function HistoryPage() {
           <Stack direction="row-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }} marginX={5}>
             <Stack direction="row" spacing={1}>
               <Button
-                variant={selectedService === 'Achat' ? 'contained' : 'outlined'}
+                variant={selectedService === 'Action' ? 'contained' : 'outlined'}
                 onClick={() => {
-                  if (selectedService !== 'Achat') setSelectedService('Achat');
+                  if (selectedService !== 'Action') setSelectedService('Action');
                 }}
               >
-                Achat
+                Action
               </Button>
-              <Button
-                variant={selectedService === 'Vente' ? 'contained' : 'outlined'}
-                onClick={() => {
-                  if (selectedService !== 'Vente') setSelectedService('Vente');
-                }}
-              >
-                Vente
-              </Button>
-
               <Button
                 variant={selectedService === 'Dividende' ? 'contained' : 'outlined'}
                 onClick={() => {
@@ -341,27 +483,38 @@ export default function HistoryPage() {
               >
                 Introduction
               </Button>
-              <Button variant={selectedService === 'tax' ? 'contained' : 'outlined'}>Tax Immobiliere</Button>
+              <Button
+                variant={selectedService === 'tax immobiliere' ? 'contained' : 'outlined'}
+                onClick={() => {
+                  if (selectedService !== 'tax immobiliere') setSelectedService('tax immobiliere');
+                }}
+              >
+                Tax Immobiliere
+              </Button>
             </Stack>
           </Stack>
 
           <Scrollbar>
-            <TableContainer sx={{ minWidth: 800 }}>
-              <Table>
+            <TableContainer sx={{ minWidth: 800, maxHeight: 740 }}>
+              <Table stickyHeader>
                 <UserListHead
                   order={order}
                   orderBy={orderBy}
-                  headLabel={TABLE_HEAD}
-                  rowCount={filteredData.length}
+                  headLabel={selectedService ? TABLE_HEAD_DIVIDENDE : TABLE_HEAD}
+                  rowCount={transactions.length}
                   numSelected={selected.length}
                   onRequestSort={handleRequestSort}
                   onSelectAllClick={handleSelectAllClick}
                 />
                 <TableBody>
                   {filteredData.map((row) => {
-                    const { id, date, titre, prix, quantite, type } = row;
+                    const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type } = row;
                     const selectedUser = selected.indexOf(id) !== -1;
-                    const milliseconds = date.seconds * 1000;
+                    const milliseconds = date
+                      ? date.seconds * 1000
+                      : dateEngagement
+                      ? dateEngagement.seconds * 1000
+                      : null;
 
                     // Create a new Date object
                     const dateMili = new Date(milliseconds);
@@ -373,58 +526,309 @@ export default function HistoryPage() {
 
                     // Format the date as a French date string
                     const frenchDate = `${day}/${month}/${year}`;
+                    const totalCommissionAchatVar = (quantite * prixAchat * 0.0044 + quantite * prixAchat).toFixed(2);
+                    const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * 0.0044).toFixed(2);
+                    const commissionAchat = (quantite * prixAchat * 0.0044).toFixed(2);
+                    const commissionVente = (quantite * prixVente * 0.0044).toFixed(2);
+                    let pnl;
+                    if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
+                      pnl = (totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2);
+                    } else {
+                      const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
 
-                    const diffBank = (
-                      bankValues[id] -
-                      (type === 'achat'
-                        ? prix * quantite + quantite * prix * 0.0044
-                        : prix * quantite - quantite * prix * 0.0044)
-                    ).toFixed(2);
+                      pnl = ((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2);
+                    }
+
                     return (
-                      <TableRow hover key={id} tabIndex={-1} role="checkbox" selected={selectedUser}>
-                        <TableCell padding="checkbox">
+                      <TableRow
+                        hover
+                        key={id}
+                        tabIndex={-1}
+                        role="checkbox"
+                        selected={selectedUser}
+                        style={{
+                          backgroundColor: selectedUser
+                            ? pnl > 0
+                              ? 'rgb(241 255 244)'
+                              : 'rgb(255 247 247)'
+                            : 'transparent',
+                        }}
+                      >
+                        <TableCell
+                          padding="checkbox"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
                           <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
                         </TableCell>
 
-                        <TableCell align="left">{frenchDate}</TableCell>
                         <TableCell
                           align="left"
-                          style={type === 'achat' ? { backgroundColor: '#b6ff8f' } : { backgroundColor: '#ff9b9b' }}
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
                         >
-                          {type.toUpperCase()}
+                          {frenchDate}
                         </TableCell>
-                        <TableCell align="left">{titre}</TableCell>
-
-                        <TableCell component="th" scope="row" padding="none">
-                          <Stack direction="row" alignItems="center" spacing={2}>
-                            <Typography variant="subtitle2" noWrap>
-                              {prix}
-                            </Typography>
-                          </Stack>
+                        {type === 'dividende' && (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {dateFrench(datePaiement)}
+                          </TableCell>
+                        )}
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {titre}
                         </TableCell>
 
-                        <TableCell align="left">{quantite}</TableCell>
-                        <TableCell align="left">{quantite * prix}</TableCell>
-                        <TableCell align="left">{(prix * quantite * 0.0044).toFixed(2)}</TableCell>
+                        {rowToEdit.includes(id) ? (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            <TextField
+                              type={'number'}
+                              value={prixValues[id]}
+                              onChange={(event) => {
+                                handlePrixChange(event, id);
+                              }}
+                            />
+                          </TableCell>
+                        ) : (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {selectedService === 'Dividende' ? row.prix : prixAchat}
+                          </TableCell>
+                        )}
+                        {selectedService !== 'Dividende' && (
+                          <>
+                            {rowToEdit.includes(id) ? (
+                              <TableCell
+                                align="left"
+                                style={{
+                                  borderRight: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                  borderBottom: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                }}
+                              >
+                                <TextField
+                                  type={'number'}
+                                  value={prixValuesVente[id]}
+                                  onChange={(event) => {
+                                    handlePrixVente(event, id);
+                                  }}
+                                />
+                              </TableCell>
+                            ) : (
+                              <TableCell
+                                align="left"
+                                style={{
+                                  borderRight: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                  borderBottom: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                }}
+                              >
+                                {prixVente}
+                              </TableCell>
+                            )}
+                          </>
+                        )}
 
-                        <TableCell align="left">
-                          {type === 'achat'
-                            ? (prix * quantite + quantite * prix * 0.0044).toFixed(2)
-                            : (prix * quantite - quantite * prix * 0.0044).toFixed(2)}
-                        </TableCell>
-                        <TableCell align="left">
-                          <TextField type={'number'} onChange={(event) => handleBankChange(event, id)} />
-                        </TableCell>
-                        <TableCell align="left">{diffBank}</TableCell>
-                        {/* <TableCell align="left">{isVerified ? 'Yes' : 'No'}</TableCell>
+                        {rowToEdit.includes(id) ? (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            <TextField
+                              type={'number'}
+                              value={quantiteValues[id]}
+                              onChange={(event) => {
+                                handleQuantiteChange(event, id);
+                              }}
+                            />
+                          </TableCell>
+                        ) : (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {' '}
+                            {quantite}
+                          </TableCell>
+                        )}
 
-                        <TableCell align="left">
-                          <Label color={(status === 'banned' && 'error') || 'success'}>{sentenceCase(status)}</Label>
-                        </TableCell> */}
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {selectedService !== 'Dividende' ? commissionAchat : row.prix * quantite * 0.15}
+                        </TableCell>
+                        {selectedService !== 'Dividende' && (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {commissionVente}
+                          </TableCell>
+                        )}
+
+                        <TableCell
+                          align="left"
+                          style={{
+                            backgroundColor:
+                              selectedService !== 'Dividende'
+                                ? pnl
+                                : row.prix * quantite - row.prix * quantite * 0.15 < 0
+                                ? 'rgb(255 247 247)'
+                                : 'rgb(241 255 244)',
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {selectedService !== 'Dividende' ? pnl : row.prix * quantite - row.prix * quantite * 0.15}
+                        </TableCell>
 
                         <TableCell align="right">
-                          <IconButton size="large" color="inherit" onClick={handleOpenMenu}>
-                            <Iconify icon={'eva:more-vertical-fill'} />
+                          {rowToEdit.includes(id) ? (
+                            <>
+                              <IconButton
+                                onClick={async () => {
+                                  const transactionRef = doc(db, 'Transactions', id);
+                                  await setDoc(transactionRef, {
+                                    ...row,
+                                    prixAchat: prixValues[id],
+                                    prixVente: prixValuesVente[id],
+                                    quantite: quantiteValues[id],
+                                  });
+                                  setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                  getTransactionsList();
+                                }}
+                              >
+                                <Iconify icon={'eva:save-fill'} />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => {
+                                  setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                }}
+                              >
+                                <Iconify icon={'eva:close-outline'} />
+                              </IconButton>
+                            </>
+                          ) : (
+                            <IconButton
+                              onClick={() => {
+                                setRowToEdit([...rowToEdit, id]);
+                              }}
+                            >
+                              <Iconify icon={'eva:edit-fill'} />
+                            </IconButton>
+                          )}
+
+                          <IconButton
+                            color="error"
+                            onClick={() => {
+                              Swal.fire({
+                                title: 'Êtes-vous sûr(e) ?',
+                                text: 'Vous êtes sur le point de supprimer cette transaction.',
+                                icon: 'warning',
+                                showCancelButton: true,
+                                confirmButtonColor: '#3085d6',
+                                cancelButtonColor: '#d33',
+                                confirmButtonText: 'Oui, supprimer !',
+                                cancelButtonText: 'Annuler',
+                              }).then(async (result) => {
+                                if (result.isConfirmed) {
+                                  await deleteDoc(doc(db, 'Transactions', id));
+                                  getTransactionsList();
+                                  Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
+                                }
+                              });
+                            }}
+                          >
+                            <Iconify icon={'eva:trash-2-outline'} />
                           </IconButton>
                         </TableCell>
                       </TableRow>
@@ -462,44 +866,85 @@ export default function HistoryPage() {
                 )}
               </Table>
             </TableContainer>
-            <Stack direction={'row'} spacing={3} marginTop={3}>
+
+            <Divider />
+            <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
+              {selectedService !== 'Dividende' && (
+                <Stack direction={'column'}>
+                  <InputLabel>
+                    <Typography variant="h6">Total Vente</Typography>
+                  </InputLabel>
+                  <TextField variant="outlined" value={totalVente} />
+                </Stack>
+              )}
               <Stack direction={'column'}>
-                <TextField
-                  label="Total"
-                  value={filteredData
-                    .map((row) =>
-                      row.type === 'achat'
-                        ? row.prix * row.quantite + row.quantite * row.prix * 0.0044
-                        : row.prix * row.quantite - row.quantite * row.prix * 0.0044
-                    )
-                    .reduce((a, b) => a + b, 0)
-                    .toFixed(2)}
-                />
+                <InputLabel>
+                  <Typography variant="h6">{selectedService !== 'Dividende' ? 'Total Achat' : 'Total Qte'}</Typography>
+                </InputLabel>
+                <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalAchat : totalDivQte} />
               </Stack>
               <Stack direction={'column'}>
-                <TextField
-                  label="Total commision"
-                  value={filteredData
-                    .map((row) => row.quantite * row.prix * 0.0044)
-                    .reduce((a, b) => a + b, 0)
-                    .toFixed(2)}
-                />
+                <InputLabel>
+                  <Typography variant="h6">IGR</Typography>
+                </InputLabel>
+                <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalTVA : igrDividende} />
               </Stack>
+              {selectedService !== 'Dividende' && (
+                <Stack direction={'column'}>
+                  <InputLabel>
+                    <Typography variant="h6">Commission</Typography>
+                  </InputLabel>
+                  <TextField
+                    variant="outlined"
+                    value={filteredData
+                      .map((row) => row.quantite * row.prixVente * 0.0044 + row.quantite * row.prixAchat * 0.0044)
+                      .reduce((a, b) => a + b, 0)
+                      .toFixed(2)}
+                  />
+                </Stack>
+              )}
+
               <Stack direction={'column'}>
-                <TextField
-                  label="Total Diff. Sys/Banque"
-                  value={filteredData
-                    .map((row) => {
-                      const bankValue = Number.isNaN(bankValues[row.id]) ? 0 : bankValues[row.id];
-                      const transactionValue =
-                        row.type === 'achat'
-                          ? row.prix * row.quantite + row.quantite * row.prix * 0.0044
-                          : row.prix * row.quantite - row.quantite * row.prix * 0.0044;
-                      return bankValue - transactionValue;
-                    })
-                    .reduce((a, b) => a + b, 0)
-                    .toFixed(2)}
-                />
+                <InputLabel>
+                  <Typography variant="h6">Total Quantité</Typography>
+                </InputLabel>
+                <TextField variant="outlined" value={totalQuantite} />
+              </Stack>
+            </Stack>
+
+            <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
+              <Stack direction={'column'}>
+                <InputLabel>
+                  <Typography variant="h6">+/- Value</Typography>
+                </InputLabel>
+                {selectedService === 'Dividende' && (
+                  <TextField
+                    variant="outlined"
+                    style={
+                      totalDividende > 0
+                        ? { backgroundColor: 'rgb(241, 255, 244)' }
+                        : totalDividende < 0
+                        ? { backgroundColor: 'rgb(255, 247, 247)' }
+                        : { backgroundColor: 'white' }
+                    }
+                    value={totalDividende}
+                  />
+                )}
+                {selectedService === 'Action' && (
+                  <TextField
+                    variant="outlined"
+                    style={
+                      !Number.isNaN(parseFloat(totalPL))
+                        ? parseFloat(totalPL) > 0
+                          ? { backgroundColor: 'rgb(241, 255, 244)' }
+                          : parseFloat(totalPL) < 0
+                          ? { backgroundColor: 'rgb(255, 247, 247)' }
+                          : { backgroundColor: 'white' }
+                        : { backgroundColor: 'white' }
+                    }
+                    value={!Number.isNaN(parseFloat(totalPL)) ? parseFloat(totalPL) : 0}
+                  />
+                )}
               </Stack>
             </Stack>
           </Scrollbar>
@@ -507,7 +952,7 @@ export default function HistoryPage() {
           <TablePagination
             rowsPerPageOptions={[5, 10, 25]}
             component="div"
-            count={USERLIST.length}
+            count={transactions.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
@@ -515,40 +960,6 @@ export default function HistoryPage() {
           />
         </Card>
       </Container>
-
-      <Popover
-        open={Boolean(open)}
-        anchorEl={open}
-        onClose={handleCloseMenu}
-        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{
-          sx: {
-            p: 1,
-            width: 140,
-            '& .MuiMenuItem-root': {
-              px: 1,
-              typography: 'body2',
-              borderRadius: 0.75,
-            },
-          },
-        }}
-      >
-        <MenuItem>
-          <Iconify icon={'eva:edit-fill'} sx={{ mr: 2 }} />
-          Modifier
-        </MenuItem>
-
-        <MenuItem
-          sx={{ color: 'error.main' }}
-          onClick={() => {
-            console.log('selected', selected);
-          }}
-        >
-          <Iconify icon={'eva:trash-2-outline'} sx={{ mr: 2 }} />
-          Suprimer
-        </MenuItem>
-      </Popover>
     </>
   );
 }

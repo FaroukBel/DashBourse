@@ -50,10 +50,10 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider)
 
-      const user = result.user;
-    navigate('/dashboard', { replace: true });
+      
+     navigate('/dashboard', { replace: true });
 
-      console.log(user)
+      
     }
     catch (error) {
       console.log(error)
@@ -62,7 +62,7 @@ export default function LoginPage() {
   return (
     <>
       <Helmet>
-        <title> Login | Minimal UI </title>
+        <title> Login </title>
       </Helmet>
 
       <StyledRoot>

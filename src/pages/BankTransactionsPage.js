@@ -17,13 +17,16 @@ export default function BankTransactionsPage() {
   return (
     <>
       <Helmet>
-        <title> Dashboard: Products | Minimal UI </title>
+        <title> Operations Banque</title>
       </Helmet>
 
       <Container fullWidth maxWidth="xl" sx={{ mt: 3 }}>
-        <Typography variant="h4" sx={{ mb: 5 }}>
+
+      <Stack direction="row" alignItems="center" justifyContent="center" mb={5} fullWidth>
+        <Typography fontSize={39} sx={{ mb: 5 }}>
           Operations Bancaire
         </Typography>
+        </Stack>
 
         <Stack direction="column" spacing={3}>
           {selectedService === 'Achat' && (

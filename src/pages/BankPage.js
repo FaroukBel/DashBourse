@@ -33,7 +33,7 @@ import {
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 // components
-import { collection, addDoc, getDocs, Timestamp, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, Timestamp, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import dayjs from 'dayjs';
 import Label from '../components/label';
 import Iconify from '../components/iconify';
@@ -98,7 +98,7 @@ export default function BankPage() {
   const [order, setOrder] = useState('asc');
 
   const [selected, setSelected] = useState([]);
-
+  const [rowToEdit, setRowToEdit] = useState([]);
   const [orderBy, setOrderBy] = useState('name');
 
   const [filterName, setFilterName] = useState('');
@@ -109,13 +109,37 @@ export default function BankPage() {
   const [finishFilterDate, setFinishFilterDate] = useState(dayjs(new Date()));
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [transactions, setTransactions] = useState([]);
-
+  const [bankValues, setBankValues] = useState({});
+  const [prixValues, setPrixValues] = useState({});
+  const [quantiteValues, setQuantiteValues] = useState({});
   const [selectedService, setSelectedService] = useState('');
 
   const [selectedSocieteFiltre, setSelectedSocieteFiltre] = useState('Titre');
 
   const listTransactionRef = collection(db, 'bank_transactions');
+  const handleBankChange = (event, id) => {
+    const { value } = event.target;
+    setBankValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
 
+  const handlePrixChange = (event, id) => {
+    const { value } = event.target;
+    setPrixValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+
+  const handleQuantiteChange = (event, id) => {
+    const { value } = event.target;
+    setQuantiteValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
   const getTransactionsList = async () => {
     const transactionSnapshot = await getDocs(listTransactionRef);
 
@@ -125,6 +149,25 @@ export default function BankPage() {
     }));
     setTransactions(transactionListData);
     setFilteredTransactions(transactionListData);
+    setPrixValues(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.prix;
+        return acc;
+      }, {})
+    );
+    setQuantiteValues(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.quantite;
+        return acc;
+      }, {})
+    );
+
+    setBankValues(
+      transactionListData.reduce((acc, row) => {
+        acc[row.id] = row.montant || 0;
+        return acc;
+      }, {})
+    );
   };
   useEffect(() => {
     getTransactionsList();
@@ -195,11 +238,11 @@ export default function BankPage() {
         return false;
       }
       // Example: Filter based on selected type
-      if (selectedService !== '' && item.type !== selectedService) {
+      if (selectedService !== '' && item.type.toLowerCase() !== selectedService.toLowerCase()) {
         return false;
       }
       // Example: Filter based on selected av
-      if (selectedAv !== '' && item.av !== selectedAv.toLowerCase()) {
+      if (selectedAv !== '' && item.av.toLowerCase() !== selectedAv.toLowerCase()) {
         return false;
       }
 
@@ -240,27 +283,32 @@ export default function BankPage() {
     .map((row) => (row.av === 'achat' ? Number(row.quantite) : 0))
     .reduce((a, b) => a + b, 0)
     .toFixed(0);
+
+  let totalMontant;
+
+  if (selected.length === 0) {
+    totalMontant = total;
+  } else {
+    totalMontant = selected
+      .reduce((acc, value) => {
+        const transaction = transactions.find((transaction) => transaction.id === value);
+        const transactionValue =
+          transaction.av === 'vente' ? Number(transaction.montant) : Number(transaction.montant) * -1;
+        return acc + transactionValue;
+      }, 0)
+      .toFixed(2);
+  }
   return (
     <>
       <Helmet>
-        <title> User | Minimal UI </title>
+        <title>Historique Banque </title>
       </Helmet>
 
       <Container>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
-          <Typography variant="h4" gutterBottom>
-            Banque
+        <Stack direction="row" alignItems="center" justifyContent="center" mb={5} fullWidth>
+          <Typography fontSize={39} gutterBottom>
+            Historique Banque
           </Typography>
-        </Stack>
-        <Stack direction="row" flexWrap="wrap-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }}>
-          <Stack direction="row" spacing={1} flexShrink={0} sx={{ my: 1 }}>
-            <ProductFilterSidebar
-              openFilter={openFilter}
-              onOpenFilter={handleOpenFilter}
-              onCloseFilter={handleCloseFilter}
-            />
-            <ProductSort />
-          </Stack>
         </Stack>
 
         <Card>
@@ -269,10 +317,24 @@ export default function BankPage() {
               <Tooltip title="Delete">
                 <IconButton
                   onClick={() => {
-                    selected.map(async (id) => {
-                      await deleteDoc(doc(db, 'bank_transactions', id));
+                    Swal.fire({
+                      title: 'Êtes-vous sûr(e) ?',
+                      text: 'Vous êtes sur le point de supprimer les transactions sélectionnées.',
+                      icon: 'warning',
+                      showCancelButton: true,
+                      confirmButtonColor: '#3085d6',
+                      cancelButtonColor: '#d33',
+                      confirmButtonText: 'Oui, supprimer !',
+                      cancelButtonText: 'Annuler',
+                    }).then(async (result) => {
+                      if (result.isConfirmed) {
+                        selected.map(async (id) => {
+                          await deleteDoc(doc(db, 'bank_transactions', id));
+                        });
+                        getTransactionsList();
+                        Swal.fire('Supprimé !', 'Les transactions sélectionnées ont été supprimées.', 'success');
+                      }
                     });
-                    getTransactionsList();
                   }}
                 >
                   <Iconify icon="eva:trash-2-fill" />
@@ -389,9 +451,9 @@ export default function BankPage() {
                 Introduction
               </Button>
               <Button
-                variant={selectedService === 'tax' ? 'contained' : 'outlined'}
+                variant={selectedService === 'Tax Immobilier' ? 'contained' : 'outlined'}
                 onClick={() => {
-                  if (selectedService !== 'tax') setSelectedService('tax');
+                  if (selectedService !== 'Tax Immobilier') setSelectedService('Tax Immobilier');
                 }}
               >
                 Tax Immobiliere
@@ -400,13 +462,13 @@ export default function BankPage() {
           </Stack>
 
           <Scrollbar>
-            <TableContainer sx={{ minWidth: 800, maxHeight: 440 }}>
+            <TableContainer sx={{ minWidth: 800, maxHeight: 740 }}>
               <Table stickyHeader>
                 <UserListHead
                   order={order}
                   orderBy={orderBy}
                   headLabel={TABLE_HEAD}
-                  rowCount={USERLIST.length}
+                  rowCount={transactions.length}
                   numSelected={selected.length}
                   onRequestSort={handleRequestSort}
                   onSelectAllClick={handleSelectAllClick}
@@ -433,42 +495,272 @@ export default function BankPage() {
                       }
 
                       return (
-                        <TableRow hover key={id} tabIndex={-1} role="checkbox" selected={selectedUser}>
-                          <TableCell padding="checkbox">
+                        <TableRow
+                          hover
+                          key={id}
+                          tabIndex={-1}
+                          role="checkbox"
+                          selected={selectedUser}
+                          style={{
+                            backgroundColor: selectedUser
+                              ? av === 'vente'
+                                ? 'rgb(241 255 244)'
+                                : 'rgb(255 247 247)'
+                              : 'transparent',
+                          }}
+                        >
+                          <TableCell
+                            padding="checkbox"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
                             <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
                           </TableCell>
 
-                          <TableCell align="left">{frenchDate}</TableCell>
                           <TableCell
                             align="left"
-                            style={av === 'vente' ? { backgroundColor: '#b6ff8f' } : { backgroundColor: '#ff9b9b' }}
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {frenchDate}
+                          </TableCell>
+                          <TableCell
+                            align="left"
+                            style={
+                              av === 'vente'
+                                ? {
+                                    backgroundColor: 'rgb(241 255 244)',
+                                    borderRight: selectedUser
+                                      ? '1px solid rgb(105 105 105 / 40%)'
+                                      : '1px solid rgb(165 165 165)',
+                                    borderBottom: selectedUser
+                                      ? '1px solid rgb(105 105 105 / 40%)'
+                                      : '1px solid rgb(165 165 165)',
+                                  }
+                                : {
+                                    backgroundColor: 'rgb(255 247 247)',
+                                    borderRight: selectedUser
+                                      ? '1px solid rgb(105 105 105 / 40%)'
+                                      : '1px solid rgb(165 165 165)',
+                                    borderBottom: selectedUser
+                                      ? '1px solid rgb(105 105 105 / 40%)'
+                                      : '1px solid rgb(165 165 165)',
+                                  }
+                            }
                           >
                             {av && av.toUpperCase()}
                           </TableCell>
-                          <TableCell align="left">{type}</TableCell>
-                          <TableCell align="left">{titre}</TableCell>
-                          <TableCell align="left">{prix}</TableCell>
-                          <TableCell align="left">{quantite}</TableCell>
-
-                          <TableCell component="th" scope="row" padding="none">
-                            <Stack direction="row" alignItems="center" spacing={2}>
-                              <Typography variant="subtitle2" noWrap>
-                                {av === 'achat' ? '-' : ''} {montant} DH
-                              </Typography>
-                            </Stack>
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {type}
                           </TableCell>
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {titre}
+                          </TableCell>
+                          {rowToEdit.includes(id) ? (
+                            <TableCell
+                              align="left"
+                              style={{
+                                borderRight: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                                borderBottom: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                              }}
+                            >
+                              <TextField
+                                type={'number'}
+                                value={prixValues[id]}
+                                onChange={(event) => {
+                                  handlePrixChange(event, id);
+                                }}
+                              />
+                            </TableCell>
+                          ) : (
+                            <TableCell
+                              align="left"
+                              style={{
+                                borderRight: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                                borderBottom: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                              }}
+                            >
+                              {prix}
+                            </TableCell>
+                          )}
 
-                          <TableCell align="right">
-                            <IconButton>
-                              <Iconify icon={'eva:edit-fill'} />
-                            </IconButton>
+                          {rowToEdit.includes(id) ? (
+                            <TableCell
+                              align="left"
+                              style={{
+                                borderRight: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                                borderBottom: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                              }}
+                            >
+                              <TextField
+                                type={'number'}
+                                value={quantiteValues[id]}
+                                onChange={(event) => {
+                                  handleQuantiteChange(event, id);
+                                }}
+                              />
+                            </TableCell>
+                          ) : (
+                            <TableCell
+                              align="left"
+                              style={{
+                                borderRight: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                                borderBottom: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                              }}
+                            >
+                              {quantite}
+                            </TableCell>
+                          )}
+
+                          {rowToEdit.includes(id) ? (
+                            <TableCell
+                              align="left"
+                              style={{
+                                borderRight: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                                borderBottom: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                              }}
+                            >
+                              <TextField
+                                type={'number'}
+                                value={bankValues[id]}
+                                onChange={(event) => {
+                                  handleBankChange(event, id);
+                                }}
+                              />
+                            </TableCell>
+                          ) : (
+                            <TableCell
+                              align="left"
+                              style={{
+                                borderRight: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                                borderBottom: selectedUser
+                                  ? '1px solid rgb(105 105 105 / 40%)'
+                                  : '1px solid rgb(165 165 165)',
+                              }}
+                            >
+                              {av === 'achat' ? '-' : ''} {montant} DH
+                            </TableCell>
+                          )}
+
+                          <TableCell
+                            align="right"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {rowToEdit.includes(id) ? (
+                              <>
+                                <IconButton
+                                  onClick={async () => {
+                                    const transactionRef = doc(db, 'bank_transactions', id);
+                                    await setDoc(transactionRef, {
+                                      ...row,
+                                      prix: prixValues[id],
+                                      quantite: quantiteValues[id],
+                                      montant: bankValues[id],
+                                    });
+                                    setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                    getTransactionsList();
+                                  }}
+                                >
+                                  <Iconify icon={'eva:save-fill'} />
+                                </IconButton>
+                                <IconButton
+                                  onClick={() => {
+                                    setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                  }}
+                                >
+                                  <Iconify icon={'eva:close-outline'} />
+                                </IconButton>
+                              </>
+                            ) : (
+                              <IconButton
+                                onClick={() => {
+                                  setRowToEdit([...rowToEdit, id]);
+                                }}
+                              >
+                                <Iconify icon={'eva:edit-fill'} />
+                              </IconButton>
+                            )}
 
                             <IconButton
                               color="error"
-                              onClick={async () => {
-                                await deleteDoc(doc(db, 'bank_transactions', id));
-
-                                getTransactionsList();
+                              onClick={() => {
+                                Swal.fire({
+                                  title: 'Êtes-vous sûr(e) ?',
+                                  text: 'Vous êtes sur le point de supprimer cette transaction.',
+                                  icon: 'warning',
+                                  showCancelButton: true,
+                                  confirmButtonColor: '#3085d6',
+                                  cancelButtonColor: '#d33',
+                                  confirmButtonText: 'Oui, supprimer !',
+                                  cancelButtonText: 'Annuler',
+                                }).then(async (result) => {
+                                  if (result.isConfirmed) {
+                                    await deleteDoc(doc(db, 'bank_transactions', id));
+                                    getTransactionsList();
+                                    Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
+                                  }
+                                });
                               }}
                             >
                               <Iconify icon={'eva:trash-2-outline'} />
@@ -538,13 +830,13 @@ export default function BankPage() {
                 <TextField
                   variant="outlined"
                   style={
-                    total > 0
-                      ? { backgroundColor: '#b6ff8f' }
-                      : total < 0
-                      ? { backgroundColor: '#ff9b9b' }
+                    totalMontant > 0
+                      ? { backgroundColor: 'rgb(241 255 244)' }
+                      : totalMontant < 0
+                      ? { backgroundColor: 'rgb(255 247 247)' }
                       : { backgroundColor: 'white' }
                   }
-                  value={total}
+                  value={totalMontant}
                 />
               </Stack>
             </Stack>

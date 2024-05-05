@@ -22,7 +22,7 @@ export default function LoginForm() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user
-      console.log(user)
+      
       navigate('/dashboard', { replace: true });
     } catch (error) {
       console.log(error)

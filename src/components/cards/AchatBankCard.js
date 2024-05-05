@@ -21,7 +21,9 @@ import { db } from '../../config/firebase-config';
 export const AchatBankCard = () => {
   const [prixAchat, setPrixAchat] = useState(null);
   const [quantiteAchat, setQuantiteAchat] = useState(null);
-
+  const prixRef = React.useRef();
+  const quantiteRef = React.useRef();
+  const montantRef = React.useRef();
   const [dateAchat, setDateAchat] = useState(new Date());
   const [montant, setMontant] = useState('');
   const [selectedType, setSelectedType] = useState('Action');
@@ -92,6 +94,7 @@ export const AchatBankCard = () => {
                     setSelectedTitre(event.target.value);
                   }}
                 >
+                
                   {selectedType === 'Tax Immobilier' && <MenuItem value="Tax Immobilier">Tax Immobilieres</MenuItem>}
                   {selectedType !== 'Tax Immobilier' &&
                     titres.map((option, index) => (
@@ -127,12 +130,28 @@ export const AchatBankCard = () => {
                   }}
                 >
                   <MenuItem value="Action">Action</MenuItem>
+                  <MenuItem value="Introduction">Introduction</MenuItem>
                   <MenuItem value="Tax Immobilier">Tax Immobilieres</MenuItem>
                 </Select>
               </FormControl>
             </Stack>
             {selectedType !== 'Tax Immobilier' && (
               <Stack direction={'row'} spacing={2}>
+                <TextField
+                  fullWidth
+                  label="Quantite"
+                  type="number"
+                  variant="outlined"
+                  size="medium"
+                  inputRef={quantiteRef}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      prixRef.current.focus();
+                    }
+                  }}
+                  value={quantiteAchat}
+                  onChange={(event) => setQuantiteAchat(event.target.value)}
+                />
                 <TextField
                   fullWidth
                   label={
@@ -144,20 +163,17 @@ export const AchatBankCard = () => {
                       ? 'Montant du dividende'
                       : 'Prix'
                   }
+                  inputRef={prixRef}
                   type="number"
                   variant="outlined"
                   size="medium"
                   value={prixAchat}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      montantRef.current.focus();
+                    }
+                  }}
                   onChange={(event) => setPrixAchat(event.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label="Quantite"
-                  type="number"
-                  variant="outlined"
-                  size="medium"
-                  value={quantiteAchat}
-                  onChange={(event) => setQuantiteAchat(event.target.value)}
                 />
               </Stack>
             )}
@@ -167,6 +183,12 @@ export const AchatBankCard = () => {
               type="number"
               variant="outlined"
               size="medium"
+              inputRef={montantRef}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAchatSubmit();
+                }
+              }}
               value={montant}
               onChange={(event) => setMontant(event.target.value)}
             />

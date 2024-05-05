@@ -22,6 +22,9 @@ import { db } from '../../config/firebase-config';
 const Transition = React.forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />);
 
 export const VenteBankCard = () => {
+  const quantiteRef = React.useRef();
+  const prixRef = React.useRef();
+  const montantRef = React.useRef();
   const [prixVente, setPrixVente] = useState(null);
   const [quantiteVente, setQuantiteVente] = useState(null);
 
@@ -50,7 +53,7 @@ export const VenteBankCard = () => {
   const handleVenteSubmit = async () => {
     try {
       if (selectedType !== 'Tax Immobilier') {
-        if (!selectedTitre || !dateVente || !prixVente || !quantiteVente || !montant) {
+        if (selectedTitre === 'Titre' || !dateVente || !prixVente || !quantiteVente || !montant) {
           showInfoAlert();
           return;
         }
@@ -127,14 +130,14 @@ export const VenteBankCard = () => {
                   size="medium"
                   onChange={(event) => {
                     setSelectedType(event.target.value);
+                    prixRef.current.focus();
                   }}
                 >
                   <MenuItem value="Action">Action</MenuItem>
-                  <MenuItem value="Introduction">Introduction</MenuItem>
+
                   <MenuItem value="Dividende">Dividende</MenuItem>
                   <MenuItem value="Tax Immobilier">Tax Immobilieres</MenuItem>
                   <MenuItem value="Gratuite">Action Gratuite</MenuItem>
-                  
                 </Select>
               </FormControl>
             </Stack>
@@ -142,30 +145,48 @@ export const VenteBankCard = () => {
               <Stack direction={'row'} spacing={2}>
                 <TextField
                   fullWidth
+                  label="Quantite"
+                  type="number"
+                  variant="outlined"
+                  inputRef={quantiteRef}
+                  size="medium"
+                  value={quantiteVente}
+                  onChange={(event) => setQuantiteVente(event.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      prixRef.current.focus();
+                    }
+                  }}
+                />
+                <TextField
+                  fullWidth
                   label="Prix de vente"
                   type="number"
                   variant="outlined"
                   size="medium"
                   value={prixVente}
+                  inputRef={prixRef}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      montantRef.current.focus();
+                    }
+                  }}
                   onChange={(event) => setPrixVente(event.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label="Quantite"
-                  type="number"
-                  variant="outlined"
-                  size="medium"
-                  value={quantiteVente}
-                  onChange={(event) => setQuantiteVente(event.target.value)}
                 />
               </Stack>
             )}
             <TextField
               fullWidth
+              inputRef={montantRef}
               label="Montant"
               type="number"
               variant="outlined"
               size="medium"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleVenteSubmit();
+                }
+              }}
               value={montant}
               onChange={(event) => setMontant(event.target.value)}
             />
