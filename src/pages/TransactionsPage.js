@@ -63,7 +63,7 @@ export default function TransactionsPage() {
           {selectedService === 'Achat' && (
             <Stack direction="row" spacing={3} fullwidth>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} width={'100%'}>
-                <AchatCard />
+                <AchatCard  />
               </Stack>
             </Stack>
           )}

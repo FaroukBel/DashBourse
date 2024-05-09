@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -39,6 +39,7 @@ export const AchatCard = () => {
   const [totalCommissionVente, setTotalCommissionVente] = useState(0);
   const [dateAchat, setDateAchat] = useState(new Date());
   const [selectedTitre, setSelectedTitre] = useState('Titre');
+  const [selectedTaxValue, setSelectedTaxValue] = useState(0.0044);
   const listAchatRef = collection(db, 'Transactions');
 
   const showSuccessAlert = () => {
@@ -58,99 +59,122 @@ export const AchatCard = () => {
   };
 
   const handleAchatChange = (event) => {
-    setPrixAchat(event.target.value);
-    setTotalAchat(event.target.value * quantiteAchat);
-    setCommissionAchat((event.target.value * quantiteAchat * 0.0044).toFixed(2));
-    setTotalCommissionAchat(
-      (event.target.value * quantiteAchat * 0.0044 + event.target.value * quantiteAchat).toFixed(2)
-    );
+    const achatValue = event.target.value;
+
+    setPrixAchat(achatValue);
+    setTotalAchat(achatValue * quantiteAchat);
+    setCommissionAchat((achatValue * quantiteAchat * selectedTaxValue).toFixed(2));
+    setTotalCommissionAchat((achatValue * quantiteAchat * selectedTaxValue + achatValue * quantiteAchat).toFixed(2));
 
     const pnlCommission =
       (
-        totalCommissionVente -
-        (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2)
+        totalCommissionVente - (achatValue * quantiteAchat - achatValue * quantiteAchat * selectedTaxValue).toFixed(2)
       ).toFixed(2) * 0.15;
 
     if (
-      totalCommissionVente -
-        (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2) <
+      totalCommissionVente - (achatValue * quantiteAchat - achatValue * quantiteAchat * selectedTaxValue).toFixed(2) <
       0
     ) {
       setPNL(
         (
-          totalCommissionVente -
-          (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2)
+          totalCommissionVente - (achatValue * quantiteAchat - achatValue * quantiteAchat * selectedTaxValue).toFixed(2)
         ).toFixed(2)
       );
     } else {
       setPNL(
         (
-          totalCommissionVente -
-          (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2)
+          totalCommissionVente - (achatValue * quantiteAchat - achatValue * quantiteAchat * selectedTaxValue).toFixed(2)
         ).toFixed(2) - pnlCommission
       );
     }
   };
 
   const handleVenteChange = (event) => {
-    setPrixVente(event.target.value);
-    setTotalVente(event.target.value * quantiteAchat);
-    setCommissionVente((event.target.value * quantiteAchat * 0.0044).toFixed(2));
-    setTotalCommissionVente(
-      (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2)
-    );
+    const venteValue = event.target.value;
+
+    setPrixVente(venteValue);
+    setTotalVente(venteValue * quantiteAchat);
+    setCommissionVente((venteValue * quantiteAchat * selectedTaxValue).toFixed(2));
+    setTotalCommissionVente((venteValue * quantiteAchat - venteValue * quantiteAchat * selectedTaxValue).toFixed(2));
     const pnlCommission =
       (
-        (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2) -
-        totalCommissionAchat
+        (venteValue * quantiteAchat - venteValue * quantiteAchat * selectedTaxValue).toFixed(2) - totalCommissionAchat
       ).toFixed(2) * 0.15;
 
     if (
-      (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2) -
-        totalCommissionAchat <
+      (venteValue * quantiteAchat - venteValue * quantiteAchat * selectedTaxValue).toFixed(2) - totalCommissionAchat <
       0
     ) {
       setPNL(
         (
-          (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2) -
-          totalCommissionAchat
+          (venteValue * quantiteAchat - venteValue * quantiteAchat * selectedTaxValue).toFixed(2) - totalCommissionAchat
         ).toFixed(2)
       );
     } else {
       setPNL(
         (
-          (event.target.value * quantiteAchat - event.target.value * quantiteAchat * 0.0044).toFixed(2) -
-          totalCommissionAchat
+          (venteValue * quantiteAchat - venteValue * quantiteAchat * selectedTaxValue).toFixed(2) - totalCommissionAchat
         ).toFixed(2) - pnlCommission
       );
     }
   };
   const handleQuantiteAchatChange = (event) => {
-    setQuantiteAchat(event.target.value);
+    const quantiteAchatValue = event.target.value;
 
-    const totalCommissionAchatVar = (event.target.value * prixAchat * 0.0044 + event.target.value * prixAchat).toFixed(
-      2
-    );
-    const totalCommissionVenteVar = (event.target.value * prixVente - event.target.value * prixVente * 0.0044).toFixed(
-      2
-    );
+    setQuantiteAchat(quantiteAchatValue);
 
-    setTotalAchat(event.target.value * prixAchat);
-    setCommissionAchat((event.target.value * prixAchat * 0.0044).toFixed(2));
+    const totalCommissionAchatVar = (
+      quantiteAchatValue * prixAchat * selectedTaxValue +
+      quantiteAchatValue * prixAchat
+    ).toFixed(2);
+    const totalCommissionVenteVar = (
+      quantiteAchatValue * prixVente -
+      quantiteAchatValue * prixVente * selectedTaxValue
+    ).toFixed(2);
+
+    setTotalAchat(quantiteAchatValue * prixAchat);
+    setCommissionAchat((quantiteAchatValue * prixAchat * selectedTaxValue).toFixed(2));
     setTotalCommissionAchat(totalCommissionAchatVar);
 
-    setTotalVente(event.target.value * prixVente);
-    setCommissionVente((event.target.value * prixVente * 0.0044).toFixed(2));
+    setTotalVente(quantiteAchatValue * prixVente);
+    setCommissionVente((quantiteAchatValue * prixVente * selectedTaxValue).toFixed(2));
     setTotalCommissionVente(totalCommissionVenteVar);
 
     if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
       setPNL((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2));
-
     } else {
       const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
 
       setPNL(((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2));
+    }
+  };
 
+  const handleTaxValueChange = (event) => {
+    setSelectedTaxValue(event.target.value);
+
+    const totalCommissionAchatVar = (
+      quantiteAchat * prixAchat * event.target.value +
+      quantiteAchat * prixAchat
+    ).toFixed(2);
+
+    const totalCommissionVenteVar = (
+      quantiteAchat * prixVente -
+      quantiteAchat * prixVente * event.target.value
+    ).toFixed(2);
+    setPrixAchat(prixAchat);
+    setTotalAchat(quantiteAchat * prixAchat);
+    setTotalVente(quantiteAchat * prixVente);
+    setCommissionAchat((quantiteAchat * prixAchat * event.target.value).toFixed(2));
+    setCommissionVente((quantiteAchat * prixVente * event.target.value).toFixed(2));
+    setTotalCommissionAchat(totalCommissionAchatVar);
+    setTotalCommissionVente(totalCommissionVenteVar);
+
+    if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
+      setPNL((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2));
+    } else {
+      const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
+
+      setPNL(((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2));
     }
   };
 
@@ -166,6 +190,8 @@ export const AchatCard = () => {
         date: new Date(dateAchat),
         prixAchat,
         prixVente,
+        type: 'action',
+        taxValue: selectedTaxValue,
         quantite: quantiteAchat,
       });
       showSuccessAlert();
@@ -180,6 +206,7 @@ export const AchatCard = () => {
       console.error('Error adding document: ', error);
     }
   };
+
   return (
     <>
       <Card style={{ width: '100%' }}>
@@ -271,6 +298,24 @@ export const AchatCard = () => {
                   }
                 }}
               />
+              <FormControl fullWidth fullheight>
+                <InputLabel id="select-titre-label">% Commission</InputLabel>
+
+                <Select
+                  labelId="select-titre-label"
+                  label="% Commission"
+                  variant="outlined"
+                  size="medium"
+                  value={selectedTaxValue}
+                  defaultValue={selectedTaxValue}
+                  onChange={(event) => {
+                    handleTaxValueChange(event);
+                  }}
+                >
+                  <MenuItem value={0.0044}>0.44%</MenuItem>
+                  <MenuItem value={0.0077}>0.77%</MenuItem>
+                </Select>
+              </FormControl>
             </Stack>
             <Stack direction={'row'} spacing={2}>
               <TextField

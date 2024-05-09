@@ -45,6 +45,7 @@ export default function DashboardAppPage() {
       const formattedDate = `${transactionDay.toString().padStart(2, '0')}/${transactionMonth
         .toString()
         .padStart(2, '0')}/${transactionYear}`;
+      console.log(formattedDate);
 
       return {
         ...transactionData,
@@ -53,7 +54,6 @@ export default function DashboardAppPage() {
       };
     });
     setTransactions(transactionListData);
-
     const titleTotalsPNL = transactionListData.reduce((acc, row) => {
       if (!acc[row.titre]) {
         acc[row.titre] = 0;
@@ -102,6 +102,14 @@ export default function DashboardAppPage() {
       setGroupByTitre(titleTotalsPNL);
     }
   };
+  const handleValuesChange = (type) => {
+    if (type === 'Nbr. Action') {
+      setGroupByTitre(titleTotalsAchat);
+    } else if (type === '+Value') {
+      setGroupByTitre(titleTotalsPNL);
+    }
+  };
+
 
   return (
     <>
@@ -111,6 +119,27 @@ export default function DashboardAppPage() {
 
       <Container maxWidth="xl">
         <Grid container spacing={3}>
+          <Grid item xs={12} md={6} lg={8}>
+            <AppConversionRates title="Conversion Rates" 
+            
+          handleCompChange={handleValuesChange}
+            subheader="(+43%) than last year" chartData={groupByTitre} />
+          </Grid>
+
+          <Grid item xs={12} md={6} lg={4}>
+            <AppCurrentVisits
+              title="Composition"
+              chartData={groupByTitre}
+              handleCompChange={handleCompChange}
+              chartColors={[
+                theme.palette.primary.main,
+                theme.palette.info.main,
+                theme.palette.warning.main,
+                theme.palette.error.main,
+              ]}
+            />
+          </Grid>
+
           <Grid item xs={12} md={6} lg={8}>
             <AppWebsiteVisits
               title="Historique"
@@ -141,39 +170,6 @@ export default function DashboardAppPage() {
                   fill: 'solid',
                   data: [30, 25, 36, 30, 45, 35, 64, 52],
                 },
-              ]}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={6} lg={4}>
-            <AppCurrentVisits
-              title="Composition"
-              chartData={groupByTitre}
-              handleCompChange={handleCompChange}
-              chartColors={[
-                theme.palette.primary.main,
-                theme.palette.info.main,
-                theme.palette.warning.main,
-                theme.palette.error.main,
-              ]}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={6} lg={8}>
-            <AppConversionRates
-              title="Conversion Rates"
-              subheader="(+43%) than last year"
-              chartData={[
-                { label: 'Italy', value: 400 },
-                { label: 'Japan', value: 430 },
-                { label: 'China', value: 448 },
-                { label: 'Canada', value: 470 },
-                { label: 'France', value: 540 },
-                { label: 'Germany', value: 580 },
-                { label: 'South Korea', value: 690 },
-                { label: 'Netherlands', value: 1100 },
-                { label: 'United States', value: 1200 },
-                { label: 'United Kingdom', value: 1380 },
               ]}
             />
           </Grid>

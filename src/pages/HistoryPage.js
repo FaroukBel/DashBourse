@@ -297,20 +297,20 @@ export default function HistoryPage() {
 
   const calculateTransactionValue = (row) => {
     if (row.type === 'achat') {
-      return row.prix * row.quantite + row.quantite * row.prix * 0.0044;
+      return row.prix * row.quantite + row.quantite * row.prix * row.taxValue;
     }
     if (row.type === 'vente') {
-      return row.prix * row.quantite - row.quantite * row.prix * 0.0044;
+      return row.prix * row.quantite - row.quantite * row.prix * row.taxValue;
     }
     return 0;
   };
 
   const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte } = filteredData.reduce(
     (acc, value) => {
-      acc.totalAchat += value.prixAchat * value.quantite + value.quantite * value.prixAchat * 0.0044;
+      acc.totalAchat += value.prixAchat * value.quantite + value.quantite * value.prixAchat * value.taxValue;
       acc.totalDiv += value.prix * value.quantite;
       acc.totalDivQte += Number(value.quantite);
-      acc.totalVente += value.prixVente * value.quantite - value.quantite * value.prixVente * 0.0044;
+      acc.totalVente += value.prixVente * value.quantite - value.quantite * value.prixVente * value.taxValue;
       acc.totalQuantite += Number(value.quantite);
       return acc;
     },
@@ -508,7 +508,7 @@ export default function HistoryPage() {
                 />
                 <TableBody>
                   {filteredData.map((row) => {
-                    const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type } = row;
+                    const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type , taxValue} = row;
                     const selectedUser = selected.indexOf(id) !== -1;
                     const milliseconds = date
                       ? date.seconds * 1000
@@ -526,10 +526,10 @@ export default function HistoryPage() {
 
                     // Format the date as a French date string
                     const frenchDate = `${day}/${month}/${year}`;
-                    const totalCommissionAchatVar = (quantite * prixAchat * 0.0044 + quantite * prixAchat).toFixed(2);
-                    const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * 0.0044).toFixed(2);
-                    const commissionAchat = (quantite * prixAchat * 0.0044).toFixed(2);
-                    const commissionVente = (quantite * prixVente * 0.0044).toFixed(2);
+                    const totalCommissionAchatVar = (quantite * prixAchat * taxValue + quantite * prixAchat).toFixed(2);
+                    const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * taxValue).toFixed(2);
+                    const commissionAchat = (quantite * prixAchat * taxValue).toFixed(2);
+                    const commissionVente = (quantite * prixVente * taxValue).toFixed(2);
                     let pnl;
                     if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
                       pnl = (totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2);
@@ -897,7 +897,7 @@ export default function HistoryPage() {
                   <TextField
                     variant="outlined"
                     value={filteredData
-                      .map((row) => row.quantite * row.prixVente * 0.0044 + row.quantite * row.prixAchat * 0.0044)
+                      .map((row) => row.quantite * row.prixVente * row.taxValue + row.quantite * row.prixAchat * row.taxValue)
                       .reduce((a, b) => a + b, 0)
                       .toFixed(2)}
                   />
