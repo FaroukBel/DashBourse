@@ -53,10 +53,19 @@ const TABLE_HEAD = [
   { id: 'cours', label: 'Achat', alignRight: false },
   { id: 'qte', label: 'Vente', alignRight: false },
   { id: 'brut', label: 'Quantite', alignRight: false },
+  { id: 'tax', label: '% Comm', alignRight: false },
   { id: 'commAchat', label: 'Comm/Achat', alignRight: false },
   { id: 'commVente', label: 'Comm/Vente', alignRight: false },
 
   { id: 'pnl', label: '+/- Value', alignRight: false },
+  { id: '' },
+];
+
+const TABLE_HEAD_IMMO = [
+  { id: 'date', label: 'Date', alignRight: false },
+
+  { id: 'societe', label: 'Societé', alignRight: false },
+  { id: 'cours', label: 'Motant', alignRight: false },
   { id: '' },
 ];
 
@@ -128,7 +137,7 @@ export default function HistoryPage() {
 
   const [selectedSocieteFiltre, setSelectedSocieteFiltre] = useState('Titre');
 
-  const [selectedService, setSelectedService] = useState('');
+  const [selectedService, setSelectedService] = useState('Action');
   const [rowToEdit, setRowToEdit] = useState([]);
   const [selectedAv, setSelectedAv] = useState('Achat');
   const [isDifferentSociete, setIsDifferentSociete] = useState(false);
@@ -137,10 +146,18 @@ export default function HistoryPage() {
   const [prixValues, setPrixValues] = useState({});
   const [prixValuesVente, setPrixValuesVente] = useState({});
   const [quantiteValues, setQuantiteValues] = useState({});
+  const [taxValues, setTaxValues] = useState({});
 
   const handleBankChange = (event, id) => {
     const { value } = event.target;
     setBankValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+  const handleTaxChange = (event, id) => {
+    const { value } = event.target;
+    setTaxValues((prevState) => ({
       ...prevState,
       [id]: value,
     }));
@@ -343,6 +360,19 @@ export default function HistoryPage() {
       .toFixed(2);
   }
 
+  let totalTaxValues;
+
+  if (selected.length === 0) {
+    totalTaxValues = filteredData.reduce((acc, row) => {
+      return acc + Number(row.prix);
+    }, 0);
+  } else {
+    totalTaxValues = selected.reduce((acc, value) => {
+      const transaction = transactions.find((transaction) => transaction.id === value);
+      return acc + Number(transaction.prix);
+    }, 0);
+  }
+
   const dateFrench = (date) => {
     const milliseconds = date ? date.seconds * 1000 : null;
 
@@ -365,7 +395,14 @@ export default function HistoryPage() {
         <title> Historique </title>
       </Helmet>
 
-      <Container>
+      <Container
+        maxWidth="xl"
+        sx={{
+          mt: 3,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <Stack direction="row" alignItems="center" justifyContent="center" mb={5} fullWidth>
           <Typography fontSize={39} gutterBottom>
             Historique transactions
@@ -475,14 +512,7 @@ export default function HistoryPage() {
               >
                 Dividende
               </Button>
-              <Button
-                variant={selectedService === 'Introduction' ? 'contained' : 'outlined'}
-                onClick={() => {
-                  if (selectedService !== 'Introduction') setSelectedService('Introduction');
-                }}
-              >
-                Introduction
-              </Button>
+
               <Button
                 variant={selectedService === 'tax immobiliere' ? 'contained' : 'outlined'}
                 onClick={() => {
@@ -500,7 +530,13 @@ export default function HistoryPage() {
                 <UserListHead
                   order={order}
                   orderBy={orderBy}
-                  headLabel={selectedService ? TABLE_HEAD_DIVIDENDE : TABLE_HEAD}
+                  headLabel={
+                    selectedService === 'Dividende'
+                      ? TABLE_HEAD_DIVIDENDE
+                      : selectedService === 'tax immobiliere'
+                      ? TABLE_HEAD_IMMO
+                      : TABLE_HEAD
+                  }
                   rowCount={transactions.length}
                   numSelected={selected.length}
                   onRequestSort={handleRequestSort}
@@ -508,7 +544,18 @@ export default function HistoryPage() {
                 />
                 <TableBody>
                   {filteredData.map((row) => {
-                    const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type , taxValue} = row;
+                    const {
+                      id,
+                      date,
+                      dateEngagement,
+                      datePaiement,
+                      titre,
+                      prixAchat,
+                      prixVente,
+                      quantite,
+                      type,
+                      taxValue,
+                    } = row;
                     const selectedUser = selected.indexOf(id) !== -1;
                     const milliseconds = date
                       ? date.seconds * 1000
@@ -642,10 +689,10 @@ export default function HistoryPage() {
                                 : '1px solid rgb(165 165 165)',
                             }}
                           >
-                            {selectedService === 'Dividende' ? row.prix : prixAchat}
+                            {selectedService !== 'Action' ? row.prix : prixAchat}
                           </TableCell>
                         )}
-                        {selectedService !== 'Dividende' && (
+                        {selectedService === 'Action' && (
                           <>
                             {rowToEdit.includes(id) ? (
                               <TableCell
@@ -684,8 +731,91 @@ export default function HistoryPage() {
                             )}
                           </>
                         )}
-
-                        {rowToEdit.includes(id) ? (
+                        {selectedService !== 'tax immobiliere' && (
+                          <>
+                            {rowToEdit.includes(id) ? (
+                              <TableCell
+                                align="left"
+                                style={{
+                                  borderRight: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                  borderBottom: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                }}
+                              >
+                                <TextField
+                                  type={'number'}
+                                  value={quantiteValues[id]}
+                                  onChange={(event) => {
+                                    handleQuantiteChange(event, id);
+                                  }}
+                                />
+                              </TableCell>
+                            ) : (
+                              <TableCell
+                                align="left"
+                                style={{
+                                  borderRight: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                  borderBottom: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                }}
+                              >
+                                {' '}
+                                {quantite}
+                              </TableCell>
+                            )}
+                          </>
+                        )}
+                        {selectedService === 'Action' && (
+                          <>
+                            {rowToEdit.includes(id) ? (
+                              <TableCell
+                                align="left"
+                                style={{
+                                  borderRight: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                  borderBottom: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                }}
+                              >
+                                <Select
+                                  labelId="demo-simple-select-label"
+                                  id="demo-simple-select"
+                                  value={taxValues[id]}
+                                  defaultValue={taxValue}
+                                  onChange={(event) => {
+                                    handleTaxChange(event, id);
+                                  }}
+                                >
+                                  <MenuItem value={0.0044}>0.44%</MenuItem>
+                                  <MenuItem value={0.0077}>0.77%</MenuItem>
+                                </Select>
+                              </TableCell>
+                            ) : (
+                              <TableCell
+                                align="left"
+                                style={{
+                                  borderRight: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                  borderBottom: selectedUser
+                                    ? '1px solid rgb(105 105 105 / 40%)'
+                                    : '1px solid rgb(165 165 165)',
+                                }}
+                              >
+                                {taxValue * 100} {' %'}
+                              </TableCell>
+                            )}
+                          </>
+                        )}
+                        {selectedService !== 'tax immobiliere' && (
                           <TableCell
                             align="left"
                             style={{
@@ -697,45 +827,10 @@ export default function HistoryPage() {
                                 : '1px solid rgb(165 165 165)',
                             }}
                           >
-                            <TextField
-                              type={'number'}
-                              value={quantiteValues[id]}
-                              onChange={(event) => {
-                                handleQuantiteChange(event, id);
-                              }}
-                            />
-                          </TableCell>
-                        ) : (
-                          <TableCell
-                            align="left"
-                            style={{
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            {' '}
-                            {quantite}
+                            {selectedService !== 'Dividende' ? commissionAchat : row.prix * quantite * 0.15}
                           </TableCell>
                         )}
-
-                        <TableCell
-                          align="left"
-                          style={{
-                            borderRight: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                            borderBottom: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                          }}
-                        >
-                          {selectedService !== 'Dividende' ? commissionAchat : row.prix * quantite * 0.15}
-                        </TableCell>
-                        {selectedService !== 'Dividende' && (
+                        {selectedService === 'Action' && (
                           <TableCell
                             align="left"
                             style={{
@@ -750,16 +845,31 @@ export default function HistoryPage() {
                             {commissionVente}
                           </TableCell>
                         )}
+                        {selectedService !== 'tax immobiliere' && (
+                          <TableCell
+                            align="left"
+                            style={{
+                              backgroundColor:
+                                selectedService === 'Dividende'
+                                  ? pnl
+                                  : row.prix * quantite - row.prix * quantite * 0.15 < 0
+                                  ? 'rgb(255 247 247)'
+                                  : 'rgb(241 255 244)',
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {selectedService !== 'Dividende' ? pnl : row.prix * quantite - row.prix * quantite * 0.15}
+                          </TableCell>
+                        )}
 
                         <TableCell
-                          align="left"
+                          align="right"
                           style={{
-                            backgroundColor:
-                              selectedService !== 'Dividende'
-                                ? pnl
-                                : row.prix * quantite - row.prix * quantite * 0.15 < 0
-                                ? 'rgb(255 247 247)'
-                                : 'rgb(241 255 244)',
                             borderRight: selectedUser
                               ? '1px solid rgb(105 105 105 / 40%)'
                               : '1px solid rgb(165 165 165)',
@@ -768,10 +878,6 @@ export default function HistoryPage() {
                               : '1px solid rgb(165 165 165)',
                           }}
                         >
-                          {selectedService !== 'Dividende' ? pnl : row.prix * quantite - row.prix * quantite * 0.15}
-                        </TableCell>
-
-                        <TableCell align="right">
                           {rowToEdit.includes(id) ? (
                             <>
                               <IconButton
@@ -782,6 +888,7 @@ export default function HistoryPage() {
                                     prixAchat: prixValues[id],
                                     prixVente: prixValuesVente[id],
                                     quantite: quantiteValues[id],
+                                    taxValue: taxValues[id],
                                   });
                                   setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
                                   getTransactionsList();
@@ -869,27 +976,33 @@ export default function HistoryPage() {
 
             <Divider />
             <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
-              {selectedService !== 'Dividende' && (
-                <Stack direction={'column'}>
-                  <InputLabel>
-                    <Typography variant="h6">Total Vente</Typography>
-                  </InputLabel>
-                  <TextField variant="outlined" value={totalVente} />
-                </Stack>
+              {selectedService !== 'tax immobiliere' && (
+                <>
+                  {selectedService !== 'Dividende' && (
+                    <Stack direction={'column'}>
+                      <InputLabel>
+                        <Typography variant="h6">Total Vente</Typography>
+                      </InputLabel>
+                      <TextField variant="outlined" value={totalVente} />
+                    </Stack>
+                  )}
+                  <Stack direction={'column'}>
+                    <InputLabel>
+                      <Typography variant="h6">
+                        {selectedService !== 'Dividende' ? 'Total Achat' : 'Total Qte'}
+                      </Typography>
+                    </InputLabel>
+                    <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalAchat : totalDivQte} />
+                  </Stack>
+                  <Stack direction={'column'}>
+                    <InputLabel>
+                      <Typography variant="h6">IGR</Typography>
+                    </InputLabel>
+                    <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalTVA : igrDividende} />
+                  </Stack>
+                </>
               )}
-              <Stack direction={'column'}>
-                <InputLabel>
-                  <Typography variant="h6">{selectedService !== 'Dividende' ? 'Total Achat' : 'Total Qte'}</Typography>
-                </InputLabel>
-                <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalAchat : totalDivQte} />
-              </Stack>
-              <Stack direction={'column'}>
-                <InputLabel>
-                  <Typography variant="h6">IGR</Typography>
-                </InputLabel>
-                <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalTVA : igrDividende} />
-              </Stack>
-              {selectedService !== 'Dividende' && (
+              {selectedService === 'Action' && (
                 <Stack direction={'column'}>
                   <InputLabel>
                     <Typography variant="h6">Commission</Typography>
@@ -897,19 +1010,23 @@ export default function HistoryPage() {
                   <TextField
                     variant="outlined"
                     value={filteredData
-                      .map((row) => row.quantite * row.prixVente * row.taxValue + row.quantite * row.prixAchat * row.taxValue)
+                      .map(
+                        (row) =>
+                          row.quantite * row.prixVente * row.taxValue + row.quantite * row.prixAchat * row.taxValue
+                      )
                       .reduce((a, b) => a + b, 0)
                       .toFixed(2)}
                   />
                 </Stack>
               )}
-
-              <Stack direction={'column'}>
-                <InputLabel>
-                  <Typography variant="h6">Total Quantité</Typography>
-                </InputLabel>
-                <TextField variant="outlined" value={totalQuantite} />
-              </Stack>
+              {selectedService !== 'tax immobiliere' && (
+                <Stack direction={'column'}>
+                  <InputLabel>
+                    <Typography variant="h6">Total Quantité</Typography>
+                  </InputLabel>
+                  <TextField variant="outlined" value={totalQuantite} />
+                </Stack>
+              )}
             </Stack>
 
             <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
@@ -934,15 +1051,27 @@ export default function HistoryPage() {
                   <TextField
                     variant="outlined"
                     style={
-                      !Number.isNaN(parseFloat(totalPL))
-                        ? parseFloat(totalPL) > 0
-                          ? { backgroundColor: 'rgb(241, 255, 244)' }
-                          : parseFloat(totalPL) < 0
-                          ? { backgroundColor: 'rgb(255, 247, 247)' }
-                          : { backgroundColor: 'white' }
+                      totalPL > 0
+                        ? { backgroundColor: 'rgb(241, 255, 244)' }
+                        : totalPL < 0
+                        ? { backgroundColor: 'rgb(255, 247, 247)' }
                         : { backgroundColor: 'white' }
                     }
                     value={!Number.isNaN(parseFloat(totalPL)) ? parseFloat(totalPL) : 0}
+                  />
+                )}
+
+                {selectedService === 'tax immobiliere' && (
+                  <TextField
+                    variant="outlined"
+                    style={
+                      totalTaxValues > 0
+                        ? { backgroundColor: 'rgb(241, 255, 244)' }
+                        : totalTaxValues < 0
+                        ? { backgroundColor: 'rgb(255, 247, 247)' }
+                        : { backgroundColor: 'white' }
+                    }
+                    value={totalTaxValues}
                   />
                 )}
               </Stack>
