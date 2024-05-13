@@ -137,9 +137,8 @@ export default function HistoryPage() {
 
   const [selectedSocieteFiltre, setSelectedSocieteFiltre] = useState('Titre');
 
-  const [selectedService, setSelectedService] = useState('Action');
+  const [selectedService, setSelectedService] = useState('Tout');
   const [rowToEdit, setRowToEdit] = useState([]);
-  const [selectedAv, setSelectedAv] = useState('Achat');
   const [isDifferentSociete, setIsDifferentSociete] = useState(false);
   const listTransactionRef = collection(db, 'Transactions');
   const [bankValues, setBankValues] = useState({});
@@ -147,14 +146,8 @@ export default function HistoryPage() {
   const [prixValuesVente, setPrixValuesVente] = useState({});
   const [quantiteValues, setQuantiteValues] = useState({});
   const [taxValues, setTaxValues] = useState({});
+  const [pnlGlobal, setPnlGlobal] = useState(0);
 
-  const handleBankChange = (event, id) => {
-    const { value } = event.target;
-    setBankValues((prevState) => ({
-      ...prevState,
-      [id]: value,
-    }));
-  };
   const handleTaxChange = (event, id) => {
     const { value } = event.target;
     setTaxValues((prevState) => ({
@@ -273,13 +266,14 @@ export default function HistoryPage() {
         return false;
       }
       // Example: Filter based on selected type
-      if (selectedService && item.type !== selectedService.toLowerCase()) {
+
+      if (selectedService && item.type !== selectedService.toLowerCase() && selectedService !== 'Tout') {
         return false;
       }
 
       return true;
     });
-  }, [transactions, beginFilterDate, finishFilterDate, selectedSocieteFiltre, selectedAv, selectedService]);
+  }, [transactions, beginFilterDate, finishFilterDate, selectedSocieteFiltre, selectedService]);
 
   const handleClick = (event, id) => {
     const selectedIndex = selected.indexOf(id);
@@ -322,22 +316,29 @@ export default function HistoryPage() {
     return 0;
   };
 
-  const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte } = filteredData.reduce(
+  const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte, pnlAction, totalTVA } = filteredData.reduce(
     (acc, value) => {
       acc.totalAchat += value.prixAchat * value.quantite + value.quantite * value.prixAchat * value.taxValue;
+      acc.totalVente += value.prixVente * value.quantite - value.quantite * value.prixVente * value.taxValue;
+      const vente = value.prixVente * value.quantite - value.quantite * value.prixVente * value.taxValue;
+      const achat = value.prixAchat * value.quantite + value.quantite * value.prixAchat * value.taxValue;
+      if (vente - achat < 0) {
+        acc.pnlAction += vente - achat;
+      } else {
+        acc.totalTVA += (vente - achat) * 0.15;
+        acc.pnlAction += vente - achat - (vente - achat) * 0.15;
+      }
+
       acc.totalDiv += value.prix * value.quantite;
       acc.totalDivQte += Number(value.quantite);
-      acc.totalVente += value.prixVente * value.quantite - value.quantite * value.prixVente * value.taxValue;
       acc.totalQuantite += Number(value.quantite);
       return acc;
     },
-    { totalAchat: 0, totalVente: 0, totalQuantite: 0, totalDiv: 0, totalDivQte: 0 }
+    { totalAchat: 0, totalVente: 0, totalQuantite: 0, totalDiv: 0, totalDivQte: 0, pnlAction: 0, totalTVA: 0 }
   );
 
-  const totalTVA = ((totalVente - totalAchat) * 0.15).toFixed(2);
-  const totalPL = (totalVente - totalAchat - (totalVente - totalAchat) * 0.15).toFixed(2);
   const igrDividende = (totalDiv * 0.15).toFixed(2);
-  const totalDividende = totalDiv.toFixed(2);
+  const totalDividende = totalDiv.toFixed(2) - igrDividende;
 
   const totalBrutFilteredData = filteredData
     .reduce((acc, row) => {
@@ -388,6 +389,864 @@ export default function HistoryPage() {
     const frenchDate = `${day}/${month}/${year}`;
 
     return frenchDate;
+  };
+
+  const ActionContainerTable = ({ height }) => {
+    let pnlActionVar = 0;
+    return (
+      <TableContainer sx={{ minWidth: 800, maxHeight: height }}>
+        <Table stickyHeader>
+          <UserListHead
+            order={order}
+            orderBy={orderBy}
+            headLabel={TABLE_HEAD}
+            rowCount={transactions.length}
+            numSelected={selected.length}
+            onRequestSort={handleRequestSort}
+            onSelectAllClick={handleSelectAllClick}
+          />
+          <TableBody>
+            {filteredData.map((row) => {
+              const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type, taxValue } =
+                row;
+              const selectedUser = selected.indexOf(id) !== -1;
+              const milliseconds = date ? date.seconds * 1000 : dateEngagement ? dateEngagement.seconds * 1000 : null;
+
+              // Create a new Date object
+              const dateMili = new Date(milliseconds);
+
+              // Extract date components
+              const day = dateMili.getDate();
+              const month = dateMili.getMonth() + 1; // Months are zero-based, so January is 0
+              const year = dateMili.getFullYear();
+
+              // Format the date as a French date string
+              const frenchDate = `${day}/${month}/${year}`;
+              const totalCommissionAchatVar = (quantite * prixAchat * taxValue + quantite * prixAchat).toFixed(2);
+              const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * taxValue).toFixed(2);
+              const commissionAchat = (quantite * prixAchat * taxValue).toFixed(2);
+              const commissionVente = (quantite * prixVente * taxValue).toFixed(2);
+              let pnl;
+              if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
+                pnl = (totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2);
+              } else {
+                const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
+
+                pnl = ((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2);
+              }
+
+              pnlActionVar += parseFloat(pnl);
+              setPnlGlobal(pnlActionVar);
+              console.log(pnlActionVar);
+              return (
+                <>
+                  {type === 'action' && (
+                    <TableRow>
+                      <TableCell
+                        padding="checkbox"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {frenchDate}
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {titre}
+                      </TableCell>
+
+                      {rowToEdit.includes(id) ? (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          <TextField
+                            type={'number'}
+                            value={prixValues[id]}
+                            onChange={(event) => {
+                              handlePrixChange(event, id);
+                            }}
+                          />
+                        </TableCell>
+                      ) : (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {prixAchat}
+                        </TableCell>
+                      )}
+
+                      {rowToEdit.includes(id) ? (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          <TextField
+                            type={'number'}
+                            value={prixValuesVente[id]}
+                            onChange={(event) => {
+                              handlePrixVente(event, id);
+                            }}
+                          />
+                        </TableCell>
+                      ) : (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {prixVente}
+                        </TableCell>
+                      )}
+
+                      {rowToEdit.includes(id) ? (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          <TextField
+                            type={'number'}
+                            value={quantiteValues[id]}
+                            onChange={(event) => {
+                              handleQuantiteChange(event, id);
+                            }}
+                          />
+                        </TableCell>
+                      ) : (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {quantite}
+                        </TableCell>
+                      )}
+
+                      <>
+                        {rowToEdit.includes(id) ? (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            <Select
+                              labelId="demo-simple-select-label"
+                              id="demo-simple-select"
+                              value={taxValues[id]}
+                              defaultValue={taxValue}
+                              onChange={(event) => {
+                                handleTaxChange(event, id);
+                              }}
+                            >
+                              <MenuItem value={0.0044}>0.44%</MenuItem>
+                              <MenuItem value={0.0077}>0.77%</MenuItem>
+                            </Select>
+                          </TableCell>
+                        ) : (
+                          <TableCell
+                            align="left"
+                            style={{
+                              borderRight: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                              borderBottom: selectedUser
+                                ? '1px solid rgb(105 105 105 / 40%)'
+                                : '1px solid rgb(165 165 165)',
+                            }}
+                          >
+                            {taxValue * 100} {' %'}
+                          </TableCell>
+                        )}
+                      </>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {commissionAchat}
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {commissionVente}
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          backgroundColor:
+                            selectedService === 'Dividende'
+                              ? pnl
+                              : row.prix * quantite - row.prix * quantite * 0.15 < 0
+                              ? 'rgb(255 247 247)'
+                              : 'rgb(241 255 244)',
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {pnl}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {rowToEdit.includes(id) ? (
+                          <>
+                            <IconButton
+                              onClick={async () => {
+                                const transactionRef = doc(db, 'Transactions', id);
+                                await setDoc(transactionRef, {
+                                  ...row,
+                                  prixAchat: prixValues[id],
+                                  prixVente: prixValuesVente[id],
+                                  quantite: quantiteValues[id],
+                                  taxValue: taxValues[id],
+                                });
+                                setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                getTransactionsList();
+                              }}
+                            >
+                              <Iconify icon={'eva:save-fill'} />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => {
+                                setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                              }}
+                            >
+                              <Iconify icon={'eva:close-outline'} />
+                            </IconButton>
+                          </>
+                        ) : (
+                          <IconButton
+                            onClick={() => {
+                              setRowToEdit([...rowToEdit, id]);
+                            }}
+                          >
+                            <Iconify icon={'eva:edit-fill'} />
+                          </IconButton>
+                        )}
+
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            Swal.fire({
+                              title: 'Êtes-vous sûr(e) ?',
+                              text: 'Vous êtes sur le point de supprimer cette transaction.',
+                              icon: 'warning',
+                              showCancelButton: true,
+                              confirmButtonColor: '#3085d6',
+                              cancelButtonColor: '#d33',
+                              confirmButtonText: 'Oui, supprimer !',
+                              cancelButtonText: 'Annuler',
+                            }).then(async (result) => {
+                              if (result.isConfirmed) {
+                                await deleteDoc(doc(db, 'Transactions', id));
+                                getTransactionsList();
+                                Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
+                              }
+                            });
+                          }}
+                        >
+                          <Iconify icon={'eva:trash-2-outline'} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
+
+  const DividendeContainerTable = ({ height }) => {
+    return (
+      <TableContainer sx={{ minWidth: 800, maxHeight: height }}>
+        <Table stickyHeader>
+          <UserListHead
+            order={order}
+            orderBy={orderBy}
+            headLabel={TABLE_HEAD_DIVIDENDE}
+            rowCount={transactions.length}
+            numSelected={selected.length}
+            onRequestSort={handleRequestSort}
+            onSelectAllClick={handleSelectAllClick}
+          />
+          <TableBody>
+            {filteredData.map((row) => {
+              const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type, taxValue } =
+                row;
+              const selectedUser = selected.indexOf(id) !== -1;
+              const milliseconds = date ? date.seconds * 1000 : dateEngagement ? dateEngagement.seconds * 1000 : null;
+
+              // Create a new Date object
+              const dateMili = new Date(milliseconds);
+
+              // Extract date components
+              const day = dateMili.getDate();
+              const month = dateMili.getMonth() + 1; // Months are zero-based, so January is 0
+              const year = dateMili.getFullYear();
+
+              // Format the date as a French date string
+              const frenchDate = `${day}/${month}/${year}`;
+              const totalCommissionAchatVar = (quantite * prixAchat * taxValue + quantite * prixAchat).toFixed(2);
+              const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * taxValue).toFixed(2);
+              const commissionAchat = (quantite * prixAchat * taxValue).toFixed(2);
+              const commissionVente = (quantite * prixVente * taxValue).toFixed(2);
+              let pnl;
+              if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
+                pnl = (totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2);
+              } else {
+                const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
+
+                pnl = ((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2);
+              }
+
+              return (
+                <>
+                  {type === 'dividende' && (
+                    <TableRow
+                      hover
+                      key={id}
+                      tabIndex={-1}
+                      role="checkbox"
+                      selected={selectedUser}
+                      style={{
+                        backgroundColor: selectedUser
+                          ? pnl > 0
+                            ? 'rgb(241 255 244)'
+                            : 'rgb(255 247 247)'
+                          : 'transparent',
+                      }}
+                    >
+                      <TableCell
+                        padding="checkbox"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {frenchDate}
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {dateFrench(datePaiement)}
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {titre}
+                      </TableCell>
+
+                      {rowToEdit.includes(id) ? (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          <TextField
+                            type={'number'}
+                            value={prixValues[id]}
+                            onChange={(event) => {
+                              handlePrixChange(event, id);
+                            }}
+                          />
+                        </TableCell>
+                      ) : (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {row.prix}
+                        </TableCell>
+                      )}
+
+                      {rowToEdit.includes(id) ? (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          <TextField
+                            type={'number'}
+                            value={quantiteValues[id]}
+                            onChange={(event) => {
+                              handleQuantiteChange(event, id);
+                            }}
+                          />
+                        </TableCell>
+                      ) : (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {' '}
+                          {quantite}
+                        </TableCell>
+                      )}
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {row.prix * quantite * 0.15}
+                      </TableCell>
+                      <TableCell
+                        align="left"
+                        style={{
+                          backgroundColor:
+                            row.prix * quantite - row.prix * quantite * 0.15 < 0
+                              ? 'rgb(255 247 247)'
+                              : 'rgb(241 255 244)',
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {row.prix * quantite - row.prix * quantite * 0.15}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {rowToEdit.includes(id) ? (
+                          <>
+                            <IconButton
+                              onClick={async () => {
+                                const transactionRef = doc(db, 'Transactions', id);
+                                await setDoc(transactionRef, {
+                                  ...row,
+                                  prixAchat: prixValues[id],
+                                  prixVente: prixValuesVente[id],
+                                  quantite: quantiteValues[id],
+                                  taxValue: taxValues[id],
+                                });
+                                setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                getTransactionsList();
+                              }}
+                            >
+                              <Iconify icon={'eva:save-fill'} />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => {
+                                setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                              }}
+                            >
+                              <Iconify icon={'eva:close-outline'} />
+                            </IconButton>
+                          </>
+                        ) : (
+                          <IconButton
+                            onClick={() => {
+                              setRowToEdit([...rowToEdit, id]);
+                            }}
+                          >
+                            <Iconify icon={'eva:edit-fill'} />
+                          </IconButton>
+                        )}
+
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            Swal.fire({
+                              title: 'Êtes-vous sûr(e) ?',
+                              text: 'Vous êtes sur le point de supprimer cette transaction.',
+                              icon: 'warning',
+                              showCancelButton: true,
+                              confirmButtonColor: '#3085d6',
+                              cancelButtonColor: '#d33',
+                              confirmButtonText: 'Oui, supprimer !',
+                              cancelButtonText: 'Annuler',
+                            }).then(async (result) => {
+                              if (result.isConfirmed) {
+                                await deleteDoc(doc(db, 'Transactions', id));
+                                getTransactionsList();
+                                Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
+                              }
+                            });
+                          }}
+                        >
+                          <Iconify icon={'eva:trash-2-outline'} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
+
+  const TaxContainerTable = ({ height }) => {
+    return (
+      <TableContainer sx={{ minWidth: 800, maxHeight: height }}>
+        <Table stickyHeader>
+          <UserListHead
+            order={order}
+            orderBy={orderBy}
+            headLabel={TABLE_HEAD_IMMO}
+            rowCount={transactions.length}
+            numSelected={selected.length}
+            onRequestSort={handleRequestSort}
+            onSelectAllClick={handleSelectAllClick}
+          />
+          <TableBody>
+            {filteredData.map((row) => {
+              const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type, taxValue } =
+                row;
+              const selectedUser = selected.indexOf(id) !== -1;
+              const milliseconds = date ? date.seconds * 1000 : dateEngagement ? dateEngagement.seconds * 1000 : null;
+
+              // Create a new Date object
+              const dateMili = new Date(milliseconds);
+
+              // Extract date components
+              const day = dateMili.getDate();
+              const month = dateMili.getMonth() + 1; // Months are zero-based, so January is 0
+              const year = dateMili.getFullYear();
+
+              // Format the date as a French date string
+              const frenchDate = `${day}/${month}/${year}`;
+              const totalCommissionAchatVar = (quantite * prixAchat * taxValue + quantite * prixAchat).toFixed(2);
+              const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * taxValue).toFixed(2);
+              const commissionAchat = (quantite * prixAchat * taxValue).toFixed(2);
+              const commissionVente = (quantite * prixVente * taxValue).toFixed(2);
+              let pnl;
+              if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
+                pnl = (totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2);
+              } else {
+                const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
+
+                pnl = ((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2);
+              }
+
+              return (
+                <>
+                  {type === 'tax immobiliere' && (
+                    <TableRow>
+                      <TableCell
+                        padding="checkbox"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {frenchDate}
+                      </TableCell>
+                      {type === 'dividende' && (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {dateFrench(datePaiement)}
+                        </TableCell>
+                      )}
+                      <TableCell
+                        align="left"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {titre}
+                      </TableCell>
+
+                      {rowToEdit.includes(id) ? (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          <TextField
+                            type={'number'}
+                            value={prixValues[id]}
+                            onChange={(event) => {
+                              handlePrixChange(event, id);
+                            }}
+                          />
+                        </TableCell>
+                      ) : (
+                        <TableCell
+                          align="left"
+                          style={{
+                            borderRight: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                            borderBottom: selectedUser
+                              ? '1px solid rgb(105 105 105 / 40%)'
+                              : '1px solid rgb(165 165 165)',
+                          }}
+                        >
+                          {row.prix}
+                        </TableCell>
+                      )}
+                      <TableCell
+                        align="right"
+                        style={{
+                          borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
+                          borderBottom: selectedUser
+                            ? '1px solid rgb(105 105 105 / 40%)'
+                            : '1px solid rgb(165 165 165)',
+                        }}
+                      >
+                        {rowToEdit.includes(id) ? (
+                          <>
+                            <IconButton
+                              onClick={async () => {
+                                const transactionRef = doc(db, 'Transactions', id);
+                                await setDoc(transactionRef, {
+                                  ...row,
+                                  prixAchat: prixValues[id],
+                                  prixVente: prixValuesVente[id],
+                                  quantite: quantiteValues[id],
+                                  taxValue: taxValues[id],
+                                });
+                                setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                getTransactionsList();
+                              }}
+                            >
+                              <Iconify icon={'eva:save-fill'} />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => {
+                                setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                              }}
+                            >
+                              <Iconify icon={'eva:close-outline'} />
+                            </IconButton>
+                          </>
+                        ) : (
+                          <IconButton
+                            onClick={() => {
+                              setRowToEdit([...rowToEdit, id]);
+                            }}
+                          >
+                            <Iconify icon={'eva:edit-fill'} />
+                          </IconButton>
+                        )}
+
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            Swal.fire({
+                              title: 'Êtes-vous sûr(e) ?',
+                              text: 'Vous êtes sur le point de supprimer cette transaction.',
+                              icon: 'warning',
+                              showCancelButton: true,
+                              confirmButtonColor: '#3085d6',
+                              cancelButtonColor: '#d33',
+                              confirmButtonText: 'Oui, supprimer !',
+                              cancelButtonText: 'Annuler',
+                            }).then(async (result) => {
+                              if (result.isConfirmed) {
+                                await deleteDoc(doc(db, 'Transactions', id));
+                                getTransactionsList();
+                                Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
+                              }
+                            });
+                          }}
+                        >
+                          <Iconify icon={'eva:trash-2-outline'} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
   };
   return (
     <>
@@ -443,7 +1302,6 @@ export default function HistoryPage() {
                   setBeginFilterDate(null);
                   setFinishFilterDate(null);
                   setSelectedSocieteFiltre('Titre');
-                  setSelectedService('');
                 }}
               >
                 <Iconify icon="ic:round-clear" />
@@ -497,6 +1355,14 @@ export default function HistoryPage() {
           <Stack direction="row-reverse" alignItems="center" justifyContent="flex-end" sx={{ mb: 5 }} marginX={5}>
             <Stack direction="row" spacing={1}>
               <Button
+                variant={selectedService === 'Tout' ? 'contained' : 'outlined'}
+                onClick={() => {
+                  if (selectedService !== 'Tout') setSelectedService('Tout');
+                }}
+              >
+                Tout
+              </Button>
+              <Button
                 variant={selectedService === 'Action' ? 'contained' : 'outlined'}
                 onClick={() => {
                   if (selectedService !== 'Action') setSelectedService('Action');
@@ -525,458 +1391,66 @@ export default function HistoryPage() {
           </Stack>
 
           <Scrollbar>
-            <TableContainer sx={{ minWidth: 800, maxHeight: 740 }}>
-              <Table stickyHeader>
-                <UserListHead
-                  order={order}
-                  orderBy={orderBy}
-                  headLabel={
-                    selectedService === 'Dividende'
-                      ? TABLE_HEAD_DIVIDENDE
-                      : selectedService === 'tax immobiliere'
-                      ? TABLE_HEAD_IMMO
-                      : TABLE_HEAD
-                  }
-                  rowCount={transactions.length}
-                  numSelected={selected.length}
-                  onRequestSort={handleRequestSort}
-                  onSelectAllClick={handleSelectAllClick}
-                />
-                <TableBody>
-                  {filteredData.map((row) => {
-                    const {
-                      id,
-                      date,
-                      dateEngagement,
-                      datePaiement,
-                      titre,
-                      prixAchat,
-                      prixVente,
-                      quantite,
-                      type,
-                      taxValue,
-                    } = row;
-                    const selectedUser = selected.indexOf(id) !== -1;
-                    const milliseconds = date
-                      ? date.seconds * 1000
-                      : dateEngagement
-                      ? dateEngagement.seconds * 1000
-                      : null;
+            {selectedService === 'Tout' && (
+              <>
+                <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
+                  <Stack direction={'column'}>
+                    <TextField
+                      variant="outlined"
+                      style={
+                        pnlGlobal > 0
+                          ? { backgroundColor: 'rgb(241, 255, 244)' }
+                          : pnlGlobal < 0
+                          ? { backgroundColor: 'rgb(255, 247, 247)' }
+                          : { backgroundColor: 'white' }
+                      }
+                      value={pnlGlobal.toFixed(2)}
+                    />
+                  </Stack>
+                </Stack>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    mt: 3,
+                    ml: 3,
+                  }}
+                >
+                  Actions
+                </Typography>
+                <ActionContainerTable height={400} />
+                <Typography
+                  variant="h4"
+                  sx={{
+                    mt: 3,
+                    ml: 3,
+                  }}
+                >
+                  Dividendes
+                </Typography>
+                <DividendeContainerTable height={400} />
+                <Typography
+                  variant="h4"
+                  sx={{
+                    mt: 3,
+                    ml: 3,
+                  }}
+                >
+                  Tax Immobiliere
+                </Typography>
+                <TaxContainerTable height={400} />
+              </>
+            )}
 
-                    // Create a new Date object
-                    const dateMili = new Date(milliseconds);
+            {selectedService === 'Action' && <ActionContainerTable height={800} />}
 
-                    // Extract date components
-                    const day = dateMili.getDate();
-                    const month = dateMili.getMonth() + 1; // Months are zero-based, so January is 0
-                    const year = dateMili.getFullYear();
+            {selectedService === 'Dividende' && <DividendeContainerTable height={800} />}
 
-                    // Format the date as a French date string
-                    const frenchDate = `${day}/${month}/${year}`;
-                    const totalCommissionAchatVar = (quantite * prixAchat * taxValue + quantite * prixAchat).toFixed(2);
-                    const totalCommissionVenteVar = (quantite * prixVente - quantite * prixVente * taxValue).toFixed(2);
-                    const commissionAchat = (quantite * prixAchat * taxValue).toFixed(2);
-                    const commissionVente = (quantite * prixVente * taxValue).toFixed(2);
-                    let pnl;
-                    if (totalCommissionVenteVar - totalCommissionAchatVar < 0) {
-                      pnl = (totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2);
-                    } else {
-                      const pnlCommission = (totalCommissionVenteVar - totalCommissionAchatVar) * 0.15;
-
-                      pnl = ((totalCommissionVenteVar - totalCommissionAchatVar).toFixed(2) - pnlCommission).toFixed(2);
-                    }
-
-                    return (
-                      <TableRow
-                        hover
-                        key={id}
-                        tabIndex={-1}
-                        role="checkbox"
-                        selected={selectedUser}
-                        style={{
-                          backgroundColor: selectedUser
-                            ? pnl > 0
-                              ? 'rgb(241 255 244)'
-                              : 'rgb(255 247 247)'
-                            : 'transparent',
-                        }}
-                      >
-                        <TableCell
-                          padding="checkbox"
-                          style={{
-                            borderRight: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                            borderBottom: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                          }}
-                        >
-                          <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, id)} />
-                        </TableCell>
-
-                        <TableCell
-                          align="left"
-                          style={{
-                            borderRight: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                            borderBottom: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                          }}
-                        >
-                          {frenchDate}
-                        </TableCell>
-                        {type === 'dividende' && (
-                          <TableCell
-                            align="left"
-                            style={{
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            {dateFrench(datePaiement)}
-                          </TableCell>
-                        )}
-                        <TableCell
-                          align="left"
-                          style={{
-                            borderRight: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                            borderBottom: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                          }}
-                        >
-                          {titre}
-                        </TableCell>
-
-                        {rowToEdit.includes(id) ? (
-                          <TableCell
-                            align="left"
-                            style={{
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            <TextField
-                              type={'number'}
-                              value={prixValues[id]}
-                              onChange={(event) => {
-                                handlePrixChange(event, id);
-                              }}
-                            />
-                          </TableCell>
-                        ) : (
-                          <TableCell
-                            align="left"
-                            style={{
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            {selectedService !== 'Action' ? row.prix : prixAchat}
-                          </TableCell>
-                        )}
-                        {selectedService === 'Action' && (
-                          <>
-                            {rowToEdit.includes(id) ? (
-                              <TableCell
-                                align="left"
-                                style={{
-                                  borderRight: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                  borderBottom: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                }}
-                              >
-                                <TextField
-                                  type={'number'}
-                                  value={prixValuesVente[id]}
-                                  onChange={(event) => {
-                                    handlePrixVente(event, id);
-                                  }}
-                                />
-                              </TableCell>
-                            ) : (
-                              <TableCell
-                                align="left"
-                                style={{
-                                  borderRight: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                  borderBottom: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                }}
-                              >
-                                {prixVente}
-                              </TableCell>
-                            )}
-                          </>
-                        )}
-                        {selectedService !== 'tax immobiliere' && (
-                          <>
-                            {rowToEdit.includes(id) ? (
-                              <TableCell
-                                align="left"
-                                style={{
-                                  borderRight: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                  borderBottom: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                }}
-                              >
-                                <TextField
-                                  type={'number'}
-                                  value={quantiteValues[id]}
-                                  onChange={(event) => {
-                                    handleQuantiteChange(event, id);
-                                  }}
-                                />
-                              </TableCell>
-                            ) : (
-                              <TableCell
-                                align="left"
-                                style={{
-                                  borderRight: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                  borderBottom: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                }}
-                              >
-                                {' '}
-                                {quantite}
-                              </TableCell>
-                            )}
-                          </>
-                        )}
-                        {selectedService === 'Action' && (
-                          <>
-                            {rowToEdit.includes(id) ? (
-                              <TableCell
-                                align="left"
-                                style={{
-                                  borderRight: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                  borderBottom: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                }}
-                              >
-                                <Select
-                                  labelId="demo-simple-select-label"
-                                  id="demo-simple-select"
-                                  value={taxValues[id]}
-                                  defaultValue={taxValue}
-                                  onChange={(event) => {
-                                    handleTaxChange(event, id);
-                                  }}
-                                >
-                                  <MenuItem value={0.0044}>0.44%</MenuItem>
-                                  <MenuItem value={0.0077}>0.77%</MenuItem>
-                                </Select>
-                              </TableCell>
-                            ) : (
-                              <TableCell
-                                align="left"
-                                style={{
-                                  borderRight: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                  borderBottom: selectedUser
-                                    ? '1px solid rgb(105 105 105 / 40%)'
-                                    : '1px solid rgb(165 165 165)',
-                                }}
-                              >
-                                {taxValue * 100} {' %'}
-                              </TableCell>
-                            )}
-                          </>
-                        )}
-                        {selectedService !== 'tax immobiliere' && (
-                          <TableCell
-                            align="left"
-                            style={{
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            {selectedService !== 'Dividende' ? commissionAchat : row.prix * quantite * 0.15}
-                          </TableCell>
-                        )}
-                        {selectedService === 'Action' && (
-                          <TableCell
-                            align="left"
-                            style={{
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            {commissionVente}
-                          </TableCell>
-                        )}
-                        {selectedService !== 'tax immobiliere' && (
-                          <TableCell
-                            align="left"
-                            style={{
-                              backgroundColor:
-                                selectedService === 'Dividende'
-                                  ? pnl
-                                  : row.prix * quantite - row.prix * quantite * 0.15 < 0
-                                  ? 'rgb(255 247 247)'
-                                  : 'rgb(241 255 244)',
-                              borderRight: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                              borderBottom: selectedUser
-                                ? '1px solid rgb(105 105 105 / 40%)'
-                                : '1px solid rgb(165 165 165)',
-                            }}
-                          >
-                            {selectedService !== 'Dividende' ? pnl : row.prix * quantite - row.prix * quantite * 0.15}
-                          </TableCell>
-                        )}
-
-                        <TableCell
-                          align="right"
-                          style={{
-                            borderRight: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                            borderBottom: selectedUser
-                              ? '1px solid rgb(105 105 105 / 40%)'
-                              : '1px solid rgb(165 165 165)',
-                          }}
-                        >
-                          {rowToEdit.includes(id) ? (
-                            <>
-                              <IconButton
-                                onClick={async () => {
-                                  const transactionRef = doc(db, 'Transactions', id);
-                                  await setDoc(transactionRef, {
-                                    ...row,
-                                    prixAchat: prixValues[id],
-                                    prixVente: prixValuesVente[id],
-                                    quantite: quantiteValues[id],
-                                    taxValue: taxValues[id],
-                                  });
-                                  setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
-                                  getTransactionsList();
-                                }}
-                              >
-                                <Iconify icon={'eva:save-fill'} />
-                              </IconButton>
-                              <IconButton
-                                onClick={() => {
-                                  setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
-                                }}
-                              >
-                                <Iconify icon={'eva:close-outline'} />
-                              </IconButton>
-                            </>
-                          ) : (
-                            <IconButton
-                              onClick={() => {
-                                setRowToEdit([...rowToEdit, id]);
-                              }}
-                            >
-                              <Iconify icon={'eva:edit-fill'} />
-                            </IconButton>
-                          )}
-
-                          <IconButton
-                            color="error"
-                            onClick={() => {
-                              Swal.fire({
-                                title: 'Êtes-vous sûr(e) ?',
-                                text: 'Vous êtes sur le point de supprimer cette transaction.',
-                                icon: 'warning',
-                                showCancelButton: true,
-                                confirmButtonColor: '#3085d6',
-                                cancelButtonColor: '#d33',
-                                confirmButtonText: 'Oui, supprimer !',
-                                cancelButtonText: 'Annuler',
-                              }).then(async (result) => {
-                                if (result.isConfirmed) {
-                                  await deleteDoc(doc(db, 'Transactions', id));
-                                  getTransactionsList();
-                                  Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
-                                }
-                              });
-                            }}
-                          >
-                            <Iconify icon={'eva:trash-2-outline'} />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {emptyRows > 0 && (
-                    <TableRow style={{ height: 53 * emptyRows }}>
-                      <TableCell colSpan={6} />
-                    </TableRow>
-                  )}
-                </TableBody>
-
-                {isNotFound && (
-                  <TableBody>
-                    <TableRow>
-                      <TableCell align="center" colSpan={6} sx={{ py: 3 }}>
-                        <Paper
-                          sx={{
-                            textAlign: 'center',
-                          }}
-                        >
-                          <Typography variant="h6" paragraph>
-                            Not found
-                          </Typography>
-
-                          <Typography variant="body2">
-                            No results found for &nbsp;
-                            <strong>&quot;{filterName}&quot;</strong>.
-                            <br /> Try checking for typos or using complete words.
-                          </Typography>
-                        </Paper>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                )}
-              </Table>
-            </TableContainer>
+            {selectedService === 'tax immobiliere' && <TaxContainerTable height={800} />}
 
             <Divider />
+
             <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
-              {selectedService !== 'tax immobiliere' && (
+              {selectedService !== 'tax immobiliere' && selectedService !== 'Tout' && (
                 <>
                   {selectedService !== 'Dividende' && (
                     <Stack direction={'column'}>
@@ -998,11 +1472,14 @@ export default function HistoryPage() {
                     <InputLabel>
                       <Typography variant="h6">IGR</Typography>
                     </InputLabel>
-                    <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalTVA : igrDividende} />
+                    <TextField
+                      variant="outlined"
+                      value={selectedService !== 'Dividende' ? totalTVA.toFixed(2) : igrDividende}
+                    />
                   </Stack>
                 </>
               )}
-              {selectedService === 'Action' && (
+              {selectedService === 'Action' && selectedService !== 'Tout' && (
                 <Stack direction={'column'}>
                   <InputLabel>
                     <Typography variant="h6">Commission</Typography>
@@ -1019,7 +1496,7 @@ export default function HistoryPage() {
                   />
                 </Stack>
               )}
-              {selectedService !== 'tax immobiliere' && (
+              {selectedService !== 'tax immobiliere' && selectedService !== 'Tout' && (
                 <Stack direction={'column'}>
                   <InputLabel>
                     <Typography variant="h6">Total Quantité</Typography>
@@ -1051,13 +1528,13 @@ export default function HistoryPage() {
                   <TextField
                     variant="outlined"
                     style={
-                      totalPL > 0
+                      pnlAction > 0
                         ? { backgroundColor: 'rgb(241, 255, 244)' }
-                        : totalPL < 0
+                        : pnlAction < 0
                         ? { backgroundColor: 'rgb(255, 247, 247)' }
                         : { backgroundColor: 'white' }
                     }
-                    value={!Number.isNaN(parseFloat(totalPL)) ? parseFloat(totalPL) : 0}
+                    value={pnlAction.toFixed(2)}
                   />
                 )}
 

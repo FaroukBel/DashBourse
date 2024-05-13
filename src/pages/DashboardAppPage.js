@@ -45,7 +45,6 @@ export default function DashboardAppPage() {
       const formattedDate = `${transactionDay.toString().padStart(2, '0')}/${transactionMonth
         .toString()
         .padStart(2, '0')}/${transactionYear}`;
-      console.log(formattedDate);
 
       return {
         ...transactionData,
@@ -110,7 +109,6 @@ export default function DashboardAppPage() {
     }
   };
 
-
   return (
     <>
       <Helmet>
@@ -120,10 +118,12 @@ export default function DashboardAppPage() {
       <Container maxWidth="xl">
         <Grid container spacing={3}>
           <Grid item xs={12} md={6} lg={8}>
-            <AppConversionRates title="Conversion Rates" 
-            
-          handleCompChange={handleValuesChange}
-            subheader="(+43%) than last year" chartData={groupByTitre} />
+            <AppConversionRates
+              title="Conversion Rates"
+              handleCompChange={handleValuesChange}
+              subheader="(+43%) than last year"
+              chartData={groupByTitre}
+            />
           </Grid>
 
           <Grid item xs={12} md={6} lg={4}>
