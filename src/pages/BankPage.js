@@ -33,7 +33,7 @@ import {
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 // components
-import { collection, addDoc, getDocs, Timestamp, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, Timestamp, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore';
 import dayjs from 'dayjs';
 import Label from '../components/label';
 import Iconify from '../components/iconify';
@@ -44,7 +44,6 @@ import { UserListHead, UserListToolbar } from '../sections/@dashboard/user';
 import USERLIST from '../_mock/user';
 import { ProductSort, ProductFilterSidebar } from '../sections/@dashboard/products';
 import { db } from '../config/firebase-config';
-import { titres } from '../utils/titres';
 
 // ----------------------------------------------------------------------
 
@@ -61,6 +60,22 @@ const TABLE_HEAD = [
 
 // ----------------------------------------------------------------------
 
+function formatNumber(number) {
+  // Convert number to string
+  const numberString = number.toString();
+
+  // Split the number into integer and decimal parts
+  const [integerPart, decimalPart] = numberString.split('.');
+
+  // Format the integer part with periods as thousand separators
+  const formattedIntegerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  // Format the decimal part, if it exists
+  const formattedDecimalPart = decimalPart ? `,${decimalPart}` : '';
+
+  // Combine the formatted integer part and the decimal part
+  return `${formattedIntegerPart}${formattedDecimalPart}`;
+}
 function descendingComparator(a, b, orderBy) {
   if (b[orderBy] < a[orderBy]) {
     return -1;
@@ -115,7 +130,23 @@ export default function BankPage() {
   const [selectedService, setSelectedService] = useState('');
 
   const [selectedSocieteFiltre, setSelectedSocieteFiltre] = useState('Titre');
+  const [titres, setTitres] = useState([]);
 
+  useEffect(() => {
+    const getTitres = async () => {
+      const titresData = await getDoc(doc(db, 'utils', 'titresDoc'));
+
+
+      if (titresData.exists()) {
+        setTitres(titresData.data().titres);
+      } else {
+        console.log('No such document!');
+      }
+    
+    };
+
+    getTitres();
+  }, []);
   const listTransactionRef = collection(db, 'bank_transactions');
   const handleBankChange = (event, id) => {
     const { value } = event.target;
@@ -304,7 +335,13 @@ export default function BankPage() {
         <title>Historique Banque </title>
       </Helmet>
 
-      <Container>
+      <Container
+        fullWidth
+        maxWidth="xxl"
+        sx={{
+          mt: 3,
+        }}
+      >
         <Stack direction="row" alignItems="center" justifyContent="center" mb={5} fullWidth>
           <Typography fontSize={39} gutterBottom>
             Historique Banque
@@ -504,8 +541,8 @@ export default function BankPage() {
                           style={{
                             backgroundColor: selectedUser
                               ? av === 'vente'
-                                ? 'rgb(241 255 244)'
-                                : 'rgb(255 247 247)'
+                                ? 'rgb(233 255 236)'
+                                : 'rgb(255 233 239)'
                               : 'transparent',
                           }}
                         >
@@ -541,7 +578,7 @@ export default function BankPage() {
                             style={
                               av === 'vente'
                                 ? {
-                                    backgroundColor: 'rgb(241 255 244)',
+                                    color: '#019875',
                                     borderRight: selectedUser
                                       ? '1px solid rgb(105 105 105 / 40%)'
                                       : '1px solid rgb(165 165 165)',
@@ -550,7 +587,7 @@ export default function BankPage() {
                                       : '1px solid rgb(165 165 165)',
                                   }
                                 : {
-                                    backgroundColor: 'rgb(255 247 247)',
+                                    color: '#e8305f',
                                     borderRight: selectedUser
                                       ? '1px solid rgb(105 105 105 / 40%)'
                                       : '1px solid rgb(165 165 165)',
@@ -663,14 +700,27 @@ export default function BankPage() {
                           {rowToEdit.includes(id) ? (
                             <TableCell
                               align="left"
-                              style={{
-                                borderRight: selectedUser
-                                  ? '1px solid rgb(105 105 105 / 40%)'
-                                  : '1px solid rgb(165 165 165)',
-                                borderBottom: selectedUser
-                                  ? '1px solid rgb(105 105 105 / 40%)'
-                                  : '1px solid rgb(165 165 165)',
-                              }}
+                              style={
+                                av === 'vente'
+                                  ? {
+                                      color: '#019875',
+                                      borderRight: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                      borderBottom: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                    }
+                                  : {
+                                      color: '#e8305f',
+                                      borderRight: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                      borderBottom: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                    }
+                              }
                             >
                               <TextField
                                 type={'number'}
@@ -683,22 +733,37 @@ export default function BankPage() {
                           ) : (
                             <TableCell
                               align="left"
-                              style={{
-                                borderRight: selectedUser
-                                  ? '1px solid rgb(105 105 105 / 40%)'
-                                  : '1px solid rgb(165 165 165)',
-                                borderBottom: selectedUser
-                                  ? '1px solid rgb(105 105 105 / 40%)'
-                                  : '1px solid rgb(165 165 165)',
-                              }}
+                              style={
+                                av === 'vente'
+                                  ? {
+                                      color: '#019875',
+                                      borderRight: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                      borderBottom: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                    }
+                                  : {
+                                      color: '#e8305f',
+                                      borderRight: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                      borderBottom: selectedUser
+                                        ? '1px solid rgb(105 105 105 / 40%)'
+                                        : '1px solid rgb(165 165 165)',
+                                    }
+                              }
                             >
-                              {av === 'achat' ? '-' : ''} {montant} DH
+                              {av === 'achat' ? '-' : ''} {formatNumber(montant)} DH
                             </TableCell>
                           )}
 
                           <TableCell
                             align="right"
+                            
                             style={{
+                              direction: 'ltr',
                               borderRight: selectedUser
                                 ? '1px solid rgb(105 105 105 / 40%)'
                                 : '1px solid rgb(165 165 165)',
@@ -707,64 +772,67 @@ export default function BankPage() {
                                 : '1px solid rgb(165 165 165)',
                             }}
                           >
-                            {rowToEdit.includes(id) ? (
-                              <>
-                                <IconButton
-                                  onClick={async () => {
-                                    const transactionRef = doc(db, 'bank_transactions', id);
-                                    await setDoc(transactionRef, {
-                                      ...row,
-                                      prix: prixValues[id],
-                                      quantite: quantiteValues[id],
-                                      montant: bankValues[id],
-                                    });
-                                    setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
-                                    getTransactionsList();
-                                  }}
-                                >
-                                  <Iconify icon={'eva:save-fill'} />
-                                </IconButton>
+                            {' '}
+                            <Stack direction={'row'}>
+                              {rowToEdit.includes(id) ? (
+                                <>
+                                  <IconButton
+                                    onClick={async () => {
+                                      const transactionRef = doc(db, 'bank_transactions', id);
+                                      await setDoc(transactionRef, {
+                                        ...row,
+                                        prix: prixValues[id],
+                                        quantite: quantiteValues[id],
+                                        montant: bankValues[id],
+                                      });
+                                      setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                      getTransactionsList();
+                                    }}
+                                  >
+                                    <Iconify icon={'eva:save-fill'} />
+                                  </IconButton>
+                                  <IconButton
+                                    onClick={() => {
+                                      setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                    }}
+                                  >
+                                    <Iconify icon={'eva:close-outline'} />
+                                  </IconButton>
+                                </>
+                              ) : (
                                 <IconButton
                                   onClick={() => {
-                                    setRowToEdit(rowToEdit.filter((rowId) => rowId !== id));
+                                    setRowToEdit([...rowToEdit, id]);
                                   }}
                                 >
-                                  <Iconify icon={'eva:close-outline'} />
+                                  <Iconify icon={'eva:edit-fill'} />
                                 </IconButton>
-                              </>
-                            ) : (
+                              )}
+
                               <IconButton
+                                color="error"
                                 onClick={() => {
-                                  setRowToEdit([...rowToEdit, id]);
+                                  Swal.fire({
+                                    title: 'Êtes-vous sûr(e) ?',
+                                    text: 'Vous êtes sur le point de supprimer cette transaction.',
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#3085d6',
+                                    cancelButtonColor: '#d33',
+                                    confirmButtonText: 'Oui, supprimer !',
+                                    cancelButtonText: 'Annuler',
+                                  }).then(async (result) => {
+                                    if (result.isConfirmed) {
+                                      await deleteDoc(doc(db, 'bank_transactions', id));
+                                      getTransactionsList();
+                                      Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
+                                    }
+                                  });
                                 }}
                               >
-                                <Iconify icon={'eva:edit-fill'} />
+                                <Iconify icon={'eva:trash-2-outline'} />
                               </IconButton>
-                            )}
-
-                            <IconButton
-                              color="error"
-                              onClick={() => {
-                                Swal.fire({
-                                  title: 'Êtes-vous sûr(e) ?',
-                                  text: 'Vous êtes sur le point de supprimer cette transaction.',
-                                  icon: 'warning',
-                                  showCancelButton: true,
-                                  confirmButtonColor: '#3085d6',
-                                  cancelButtonColor: '#d33',
-                                  confirmButtonText: 'Oui, supprimer !',
-                                  cancelButtonText: 'Annuler',
-                                }).then(async (result) => {
-                                  if (result.isConfirmed) {
-                                    await deleteDoc(doc(db, 'bank_transactions', id));
-                                    getTransactionsList();
-                                    Swal.fire('Supprimé !', 'La transaction a été supprimée.', 'success');
-                                  }
-                                });
-                              }}
-                            >
-                              <Iconify icon={'eva:trash-2-outline'} />
-                            </IconButton>
+                            </Stack>
                           </TableCell>
                         </TableRow>
                       );
@@ -807,13 +875,13 @@ export default function BankPage() {
                 <InputLabel>
                   <Typography variant="h6">Total Achat</Typography>
                 </InputLabel>
-                <TextField variant="outlined" value={totalAchat} />
+                <TextField variant="outlined" value={formatNumber(totalAchat)} />
               </Stack>
               <Stack direction={'column'}>
                 <InputLabel>
                   <Typography variant="h6">Total Vente</Typography>
                 </InputLabel>
-                <TextField variant="outlined" value={totalVente} />
+                <TextField variant="outlined" value={formatNumber(totalVente)} />
               </Stack>
               <Stack direction={'column'}>
                 <InputLabel>
@@ -829,14 +897,12 @@ export default function BankPage() {
                 </InputLabel>
                 <TextField
                   variant="outlined"
-                  style={
-                    totalMontant > 0
-                      ? { backgroundColor: 'rgb(241 255 244)' }
-                      : totalMontant < 0
-                      ? { backgroundColor: 'rgb(255 247 247)' }
-                      : { backgroundColor: 'white' }
-                  }
-                  value={totalMontant}
+
+                  inputProps={{ style: { color: totalMontant < 0 ? '#e8305f' : '#019875' } }}
+
+
+                 
+                  value={`${formatNumber(totalMontant)} DH`} 
                 />
               </Stack>
             </Stack>

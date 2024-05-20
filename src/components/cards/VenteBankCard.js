@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Card,
@@ -12,11 +12,10 @@ import {
   TextField,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import Swal from 'sweetalert2';
 import Slide from '@mui/material/Slide';
-import { titres } from '../../utils/titres';
 import { db } from '../../config/firebase-config';
 
 const Transition = React.forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />);
@@ -33,7 +32,23 @@ export const VenteBankCard = () => {
   const [selectedType, setSelectedType] = useState('Action');
   const [selectedTitre, setSelectedTitre] = useState('Titre');
   const listVenteRef = collection(db, 'bank_transactions');
+  const [titres, setTitres] = useState([]);
 
+  useEffect(() => {
+    const getTitres = async () => {
+      const titresData = await getDoc(doc(db, 'utils', 'titresDoc'));
+
+
+      if (titresData.exists()) {
+        setTitres(titresData.data().titres);
+      } else {
+        console.log('No such document!');
+      }
+    
+    };
+
+    getTitres();
+  }, []);
   const showSuccessAlert = () => {
     Swal.fire({
       icon: 'success',

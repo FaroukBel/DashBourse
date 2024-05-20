@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Card,
@@ -12,10 +12,9 @@ import {
   TextField,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import Swal from 'sweetalert2';
-import { titres } from '../../utils/titres';
 import { db } from '../../config/firebase-config';
 
 export const AchatBankCard = () => {
@@ -29,6 +28,23 @@ export const AchatBankCard = () => {
   const [selectedType, setSelectedType] = useState('Action');
   const [selectedTitre, setSelectedTitre] = useState('Titre');
   const listAchatRef = collection(db, 'bank_transactions');
+  const [titres, setTitres] = useState([]);
+
+  useEffect(() => {
+    const getTitres = async () => {
+      const titresData = await getDoc(doc(db, 'utils', 'titresDoc'));
+
+
+      if (titresData.exists()) {
+        setTitres(titresData.data().titres);
+      } else {
+        console.log('No such document!');
+      }
+    
+    };
+
+    getTitres();
+  }, []);
 
   const showSuccessAlert = () => {
     Swal.fire({
@@ -94,7 +110,6 @@ export const AchatBankCard = () => {
                     setSelectedTitre(event.target.value);
                   }}
                 >
-                
                   {selectedType === 'Tax Immobilier' && <MenuItem value="Tax Immobilier">Tax Immobilieres</MenuItem>}
                   {selectedType !== 'Tax Immobilier' &&
                     titres.map((option, index) => (

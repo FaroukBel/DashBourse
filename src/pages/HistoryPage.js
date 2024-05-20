@@ -35,7 +35,7 @@ import {
 } from '@mui/material';
 // components
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
-import { titres } from '../utils/titres';
+
 import Iconify from '../components/iconify';
 import Scrollbar from '../components/scrollbar';
 // sections
@@ -111,6 +111,33 @@ function applySortFilter(array, comparator, query) {
   return stabilizedThis.map((el) => el[0]);
 }
 
+function formatNumber(number) {
+  // Convert number to string
+  const numberString = number.toString();
+
+  // Split the number into integer and decimal parts
+  const [integerPart, decimalPart] = numberString.split('.');
+
+  // Format the integer part with periods as thousand separators
+  const formattedIntegerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  // Format the decimal part, if it exists
+  const formattedDecimalPart = decimalPart ? `,${decimalPart}` : '';
+
+  // Combine the formatted integer part and the decimal part
+  return `${formattedIntegerPart}${formattedDecimalPart}`;
+}
+
+function stableSort(array, comparator) {
+  const stabilizedThis = array.map((el, index) => [el, index]);
+  stabilizedThis.sort((a, b) => {
+    const order = comparator(a[0], b[0]);
+    if (order !== 0) return order;
+    return a[1] - b[1];
+  });
+  return stabilizedThis.map((el) => el[0]);
+}
+
 export default function HistoryPage() {
   const [open, setOpen] = useState(null);
 
@@ -120,7 +147,7 @@ export default function HistoryPage() {
 
   const [selected, setSelected] = useState([]);
 
-  const [orderBy, setOrderBy] = useState('name');
+  const [orderBy, setOrderBy] = useState('date');
 
   const [filterName, setFilterName] = useState('');
 
@@ -147,6 +174,7 @@ export default function HistoryPage() {
   const [quantiteValues, setQuantiteValues] = useState({});
   const [taxValues, setTaxValues] = useState({});
   const [pnlGlobal, setPnlGlobal] = useState(0);
+  const [titres, setTitres] = useState([]);
 
   const handleTaxChange = (event, id) => {
     const { value } = event.target;
@@ -181,7 +209,10 @@ export default function HistoryPage() {
 
   const getTransactionsList = async () => {
     const transactionSnapshot = await getDocs(listTransactionRef);
+    const titresData = await getDoc(doc(db, 'utils', 'titresDoc'));
 
+    const titresList = titresData.data().titres;
+    setTitres(titresList);
     const transactionListData = transactionSnapshot.docs.map((doc) => ({
       ...doc.data(),
       id: doc.id,
@@ -302,9 +333,9 @@ export default function HistoryPage() {
 
   const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - transactions.length) : 0;
 
-  const filteredUsers = applySortFilter(transactions, getComparator(order, orderBy), filterName);
+  const sortedData = stableSort(filteredData, getComparator(order, orderBy));
 
-  const isNotFound = !filteredUsers.length && !!filterName;
+  const isNotFound = !sortedData.length && !!filterName;
 
   const calculateTransactionValue = (row) => {
     if (row.type === 'achat') {
@@ -316,26 +347,59 @@ export default function HistoryPage() {
     return 0;
   };
 
-  const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte, pnlAction, totalTVA } = filteredData.reduce(
-    (acc, value) => {
-      acc.totalAchat += value.prixAchat * value.quantite + value.quantite * value.prixAchat * value.taxValue;
-      acc.totalVente += value.prixVente * value.quantite - value.quantite * value.prixVente * value.taxValue;
-      const vente = value.prixVente * value.quantite - value.quantite * value.prixVente * value.taxValue;
-      const achat = value.prixAchat * value.quantite + value.quantite * value.prixAchat * value.taxValue;
-      if (vente - achat < 0) {
-        acc.pnlAction += vente - achat;
-      } else {
-        acc.totalTVA += (vente - achat) * 0.15;
-        acc.pnlAction += vente - achat - (vente - achat) * 0.15;
-      }
+  const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte, pnlAction, totalTVA, globalPnl, taxImmoTotal } =
+    filteredData.reduce(
+      (acc, value) => {
+        // Parse fields as numbers and handle missing fields
+        const prixAchat = parseFloat(value.prixAchat) || 0;
+        const prixVente = parseFloat(value.prixVente) || 0;
+        const quantite = parseFloat(value.quantite) || 0;
+        const taxValue = parseFloat(value.taxValue) || 0;
+        const prix = parseFloat(value.prix) || 0;
 
-      acc.totalDiv += value.prix * value.quantite;
-      acc.totalDivQte += Number(value.quantite);
-      acc.totalQuantite += Number(value.quantite);
-      return acc;
-    },
-    { totalAchat: 0, totalVente: 0, totalQuantite: 0, totalDiv: 0, totalDivQte: 0, pnlAction: 0, totalTVA: 0 }
-  );
+        // Calculate total purchase and sale amounts with tax
+        acc.totalAchat += prixAchat * quantite + quantite * prixAchat * taxValue;
+        acc.totalVente += prixVente * quantite - quantite * prixVente * taxValue;
+
+        // Calculate profit and loss
+        const vente = prixVente * quantite - quantite * prixVente * taxValue;
+        const achat = prixAchat * quantite + quantite * prixAchat * taxValue;
+
+        if (vente - achat < 0) {
+          acc.pnlAction += vente - achat;
+        } else {
+          acc.totalTVA += (vente - achat) * 0.15;
+          acc.pnlAction += vente - achat - (vente - achat) * 0.15;
+        }
+
+        // Calculate total dividends
+        if (value.type === 'dividende') {
+          acc.totalDiv += prix * quantite;
+          acc.totalDivQte += quantite;
+        }
+        if (value.type === 'tax immobiliere') {
+          acc.taxImmoTotal += prix;
+        }
+        // Calculate total quantity
+        acc.totalQuantite += quantite;
+        const igrDividende = (acc.totalDiv * 0.15).toFixed(2);
+        // Calculate global pnl
+        acc.globalPnl =
+          parseFloat(acc.pnlAction) + parseFloat(acc.totalDiv - igrDividende) + parseFloat(acc.taxImmoTotal);
+        return acc;
+      },
+      {
+        totalAchat: 0,
+        totalVente: 0,
+        totalQuantite: 0,
+        totalDiv: 0,
+        totalDivQte: 0,
+        pnlAction: 0,
+        totalTVA: 0,
+        globalPnl: 0,
+        taxImmoTotal: 0,
+      }
+    );
 
   const igrDividende = (totalDiv * 0.15).toFixed(2);
   const totalDividende = totalDiv.toFixed(2) - igrDividende;
@@ -406,7 +470,7 @@ export default function HistoryPage() {
             onSelectAllClick={handleSelectAllClick}
           />
           <TableBody>
-            {filteredData.map((row) => {
+            {sortedData.map((row) => {
               const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type, taxValue } =
                 row;
               const selectedUser = selected.indexOf(id) !== -1;
@@ -436,8 +500,7 @@ export default function HistoryPage() {
               }
 
               pnlActionVar += parseFloat(pnl);
-              setPnlGlobal(pnlActionVar);
-              console.log(pnlActionVar);
+
               return (
                 <>
                   {type === 'action' && (
@@ -656,23 +719,28 @@ export default function HistoryPage() {
                       <TableCell
                         align="left"
                         style={{
-                          backgroundColor:
+                          color:
                             selectedService === 'Dividende'
                               ? pnl
-                              : row.prix * quantite - row.prix * quantite * 0.15 < 0
-                              ? 'rgb(255 247 247)'
-                              : 'rgb(241 255 244)',
+                              : selectedService === 'Tout'
+                              ? pnl > 0
+                                ? '#019875'
+                                : '#e8305f'
+                              : '#019875',
+
                           borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
                           borderBottom: selectedUser
                             ? '1px solid rgb(105 105 105 / 40%)'
                             : '1px solid rgb(165 165 165)',
                         }}
                       >
-                        {pnl}
+                        {formatNumber(pnl)} DH
                       </TableCell>
                       <TableCell
                         align="right"
                         style={{
+                          direction: 'ltr',
+                          width: '120px',
                           borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
                           borderBottom: selectedUser
                             ? '1px solid rgb(105 105 105 / 40%)'
@@ -803,11 +871,7 @@ export default function HistoryPage() {
                       role="checkbox"
                       selected={selectedUser}
                       style={{
-                        backgroundColor: selectedUser
-                          ? pnl > 0
-                            ? 'rgb(241 255 244)'
-                            : 'rgb(255 247 247)'
-                          : 'transparent',
+                        backgroundColor: selectedUser ? (pnl > 0 ? '#019875' : '#e8305f') : 'transparent',
                       }}
                     >
                       <TableCell
@@ -945,21 +1009,19 @@ export default function HistoryPage() {
                       <TableCell
                         align="left"
                         style={{
-                          backgroundColor:
-                            row.prix * quantite - row.prix * quantite * 0.15 < 0
-                              ? 'rgb(255 247 247)'
-                              : 'rgb(241 255 244)',
+                          color: row.prix * quantite - row.prix * quantite * 0.15 < 0 ? '#e8305f' : '#019875',
                           borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
                           borderBottom: selectedUser
                             ? '1px solid rgb(105 105 105 / 40%)'
                             : '1px solid rgb(165 165 165)',
                         }}
                       >
-                        {row.prix * quantite - row.prix * quantite * 0.15}
+                        {formatNumber(row.prix * quantite - row.prix * quantite * 0.15)} DH
                       </TableCell>
                       <TableCell
                         align="right"
                         style={{
+                          direction: 'ltr',
                           borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
                           borderBottom: selectedUser
                             ? '1px solid rgb(105 105 105 / 40%)'
@@ -1166,12 +1228,13 @@ export default function HistoryPage() {
                               : '1px solid rgb(165 165 165)',
                           }}
                         >
-                          {row.prix}
+                          {formatNumber(row.prix)} DH
                         </TableCell>
                       )}
                       <TableCell
                         align="right"
                         style={{
+                          direction: 'ltr',
                           borderRight: selectedUser ? '1px solid rgb(105 105 105 / 40%)' : '1px solid rgb(165 165 165)',
                           borderBottom: selectedUser
                             ? '1px solid rgb(105 105 105 / 40%)'
@@ -1255,7 +1318,7 @@ export default function HistoryPage() {
       </Helmet>
 
       <Container
-        maxWidth="xl"
+        maxWidth="xxl"
         sx={{
           mt: 3,
           display: 'flex',
@@ -1395,49 +1458,86 @@ export default function HistoryPage() {
               <>
                 <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3}>
                   <Stack direction={'column'}>
+                    <Typography variant="h4">Total global</Typography>
                     <TextField
                       variant="outlined"
-                      style={
-                        pnlGlobal > 0
-                          ? { backgroundColor: 'rgb(241, 255, 244)' }
-                          : pnlGlobal < 0
-                          ? { backgroundColor: 'rgb(255, 247, 247)' }
-                          : { backgroundColor: 'white' }
-                      }
-                      value={pnlGlobal.toFixed(2)}
+                      inputProps={{ style: { color: globalPnl < 0 ? '#e8305f' : '#019875' } }}
+                      value={formatNumber(globalPnl.toFixed(2))}
                     />
                   </Stack>
                 </Stack>
-                <Typography
-                  variant="h4"
-                  sx={{
-                    mt: 3,
-                    ml: 3,
-                  }}
-                >
-                  Actions
-                </Typography>
+                <Stack direction={'row'} justifyContent={'center'} alignItems={'center'}>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      mt: 3,
+                      ml: 3,
+                    }}
+                  >
+                    Actions
+                  </Typography>
+                </Stack>
+
                 <ActionContainerTable height={400} />
-                <Typography
-                  variant="h4"
-                  sx={{
-                    mt: 3,
-                    ml: 3,
-                  }}
-                >
-                  Dividendes
-                </Typography>
+                <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={2}>
+                  <Stack direction={'column'}>
+                    <Typography variant="h4">Total action</Typography>
+                    <TextField
+                      variant="outlined"
+                      inputProps={{ style: { color: pnlAction < 0 ? '#e8305f' : '#019875' } }}
+                      value={formatNumber(pnlAction.toFixed(2))}
+                    />
+                  </Stack>
+                </Stack>
+                <Divider />
+
+                <Stack direction={'row'} justifyContent={'center'} alignItems={'center'}>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      mt: 3,
+                      ml: 3,
+                    }}
+                  >
+                    Dividendes
+                  </Typography>
+                </Stack>
+
                 <DividendeContainerTable height={400} />
-                <Typography
-                  variant="h4"
-                  sx={{
-                    mt: 3,
-                    ml: 3,
-                  }}
-                >
-                  Tax Immobiliere
-                </Typography>
+                <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={2}>
+                  <Stack direction={'column'}>
+                    <Typography variant="h4">Total dividende</Typography>
+                    <TextField
+                      variant="outlined"
+                      inputProps={{ style: { color: '#019875' } }}
+                      value={formatNumber(totalDividende.toFixed(2))}
+                    />
+                  </Stack>
+                </Stack>
+                <Divider />
+
+                <Stack direction={'row'} justifyContent={'center'} alignItems={'center'}>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      mt: 3,
+                      ml: 3,
+                    }}
+                  >
+                    Tax Immobiliere
+                  </Typography>
+                </Stack>
                 <TaxContainerTable height={400} />
+                <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={3}>
+                  <Stack direction={'column'}>
+                    <Typography variant="h4">Total tax immobiliere</Typography>
+                    <TextField
+                      variant="outlined"
+                      inputProps={{ style: { color: '#019875' } }}
+                      value={formatNumber(taxImmoTotal.toFixed(2))}
+                    />
+                  </Stack>
+                </Stack>
               </>
             )}
 
@@ -1457,7 +1557,7 @@ export default function HistoryPage() {
                       <InputLabel>
                         <Typography variant="h6">Total Vente</Typography>
                       </InputLabel>
-                      <TextField variant="outlined" value={totalVente} />
+                      <TextField variant="outlined" value={formatNumber(totalVente.toFixed(2))} />
                     </Stack>
                   )}
                   <Stack direction={'column'}>
@@ -1466,7 +1566,14 @@ export default function HistoryPage() {
                         {selectedService !== 'Dividende' ? 'Total Achat' : 'Total Qte'}
                       </Typography>
                     </InputLabel>
-                    <TextField variant="outlined" value={selectedService !== 'Dividende' ? totalAchat : totalDivQte} />
+                    <TextField
+                      variant="outlined"
+                      value={
+                        selectedService !== 'Dividende'
+                          ? formatNumber(totalAchat.toFixed(2))
+                          : formatNumber(totalDivQte.toFixed(2))
+                      }
+                    />
                   </Stack>
                   <Stack direction={'column'}>
                     <InputLabel>
@@ -1474,7 +1581,11 @@ export default function HistoryPage() {
                     </InputLabel>
                     <TextField
                       variant="outlined"
-                      value={selectedService !== 'Dividende' ? totalTVA.toFixed(2) : igrDividende}
+                      value={
+                        selectedService !== 'Dividende'
+                          ? formatNumber(totalTVA.toFixed(2))
+                          : formatNumber(igrDividende.toFixed(2))
+                      }
                     />
                   </Stack>
                 </>
@@ -1501,7 +1612,7 @@ export default function HistoryPage() {
                   <InputLabel>
                     <Typography variant="h6">Total Quantité</Typography>
                   </InputLabel>
-                  <TextField variant="outlined" value={totalQuantite} />
+                  <TextField variant="outlined" value={formatNumber(totalQuantite.toFixed(2))} />
                 </Stack>
               )}
             </Stack>
@@ -1516,9 +1627,9 @@ export default function HistoryPage() {
                     variant="outlined"
                     style={
                       totalDividende > 0
-                        ? { backgroundColor: 'rgb(241, 255, 244)' }
+                        ? { color: 'rgb(241, 255, 244)' }
                         : totalDividende < 0
-                        ? { backgroundColor: 'rgb(255, 247, 247)' }
+                        ? { color: 'rgb(255, 247, 247)' }
                         : { backgroundColor: 'white' }
                     }
                     value={totalDividende}
@@ -1529,12 +1640,12 @@ export default function HistoryPage() {
                     variant="outlined"
                     style={
                       pnlAction > 0
-                        ? { backgroundColor: 'rgb(241, 255, 244)' }
+                        ? { color: 'rgb(241, 255, 244)' }
                         : pnlAction < 0
-                        ? { backgroundColor: 'rgb(255, 247, 247)' }
+                        ? { color: 'rgb(255, 247, 247)' }
                         : { backgroundColor: 'white' }
                     }
-                    value={pnlAction.toFixed(2)}
+                    value={formatNumber(pnlAction.toFixed(2))}
                   />
                 )}
 
@@ -1543,9 +1654,9 @@ export default function HistoryPage() {
                     variant="outlined"
                     style={
                       totalTaxValues > 0
-                        ? { backgroundColor: 'rgb(241, 255, 244)' }
+                        ? { color: 'rgb(241, 255, 244)' }
                         : totalTaxValues < 0
-                        ? { backgroundColor: 'rgb(255, 247, 247)' }
+                        ? { color: 'rgb(255, 247, 247)' }
                         : { backgroundColor: 'white' }
                     }
                     value={totalTaxValues}

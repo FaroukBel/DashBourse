@@ -36,6 +36,17 @@ export default function NavSection({ data = [], ...other }) {
                 Banque
               </Typography>
             )}
+            {item.title === 'Outils' && (
+              <Typography
+                fontSize={24}
+                marginTop={5}
+                style={{ borderBottom: '5px solid lightblue', borderRadius: '5px' }}
+                paddingLeft={1}
+              >
+                Outils
+              </Typography>
+            )}
+
             <NavItem key={item.title} item={item} />
           </>
         ))}

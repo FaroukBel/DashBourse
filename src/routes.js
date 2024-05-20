@@ -15,6 +15,8 @@ import HistoryPage from './pages/HistoryPage';
 import TransactionsPage from './pages/TransactionsPage';
 import BankPage from './pages/BankPage';
 import BankTransactionsPage from './pages/BankTransactionsPage';
+import SettingsPage from './pages/SettingsPage';
+import ToolsPage from './pages/ToolsPage';
 
 // ----------------------------------------------------------------------
 
@@ -35,6 +37,8 @@ export default function Router() {
         { path: 'transactions', element: <TransactionsPage /> },
         { path: 'bank-history', element: <BankPage /> },
         { path: 'bank-ops', element: <BankTransactionsPage /> },
+        { path: 'tools', element: <ToolsPage /> },
+        { path: 'settings', element: <SettingsPage /> },
       ],
     },
     {

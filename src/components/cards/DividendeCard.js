@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Card,
@@ -14,10 +14,9 @@ import {
 import dayjs from 'dayjs';
 import Swal from 'sweetalert2';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { db } from '../../config/firebase-config';
-import { titres } from '../../utils/titres';
 
 export const DividendeCard = () => {
   const [dateEngagement, setDateEngagement] = useState(dayjs(new Date()));
@@ -28,7 +27,23 @@ export const DividendeCard = () => {
   const [totalAchat, setTotalAchat] = useState(0);
   const [totalCommissionAchat, setTotalCommissionAchat] = useState(0);
   const [selectedTitre, setSelectedTitre] = useState('Titre');
+  const [titres, setTitres] = useState([]);
 
+  useEffect(() => {
+    const getTitres = async () => {
+      const titresData = await getDoc(doc(db, 'utils', 'titresDoc'));
+
+
+      if (titresData.exists()) {
+        setTitres(titresData.data().titres);
+      } else {
+        console.log('No such document!');
+      }
+    
+    };
+
+    getTitres();
+  }, []);
   const listAchatRef = collection(db, 'Transactions');
 
   const showSuccessAlert = () => {
