@@ -1584,7 +1584,7 @@ export default function HistoryPage() {
                       value={
                         selectedService !== 'Dividende'
                           ? formatNumber(totalTVA.toFixed(2))
-                          : formatNumber(igrDividende.toFixed(2))
+                          : formatNumber(Number(igrDividende).toFixed(2))
                       }
                     />
                   </Stack>
