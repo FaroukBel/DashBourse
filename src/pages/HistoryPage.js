@@ -1,5 +1,5 @@
 import { Helmet } from 'react-helmet-async';
-import { filter, set } from 'lodash';
+import { filter, orderBy, set } from 'lodash';
 import { sentenceCase } from 'change-case';
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
@@ -7,19 +7,18 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers';
 import Swal from 'sweetalert2';
+import { format } from 'date-fns';
+import { Save, Cancel } from '@mui/icons-material';
+
 // @mui
 import {
   Card,
   Table,
   Stack,
-  Alert,
-  Paper,
-  Avatar,
   FormControl,
   InputLabel,
   Select,
   Button,
-  Popover,
   Checkbox,
   TableRow,
   MenuItem,
@@ -33,6 +32,9 @@ import {
   TextField,
   Divider,
 } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
+
+import { frFR } from '@mui/x-date-pickers/locales';
 // components
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 
@@ -49,16 +51,14 @@ import { db } from '../config/firebase-config';
 
 const TABLE_HEAD = [
   { id: 'date', label: 'Date', alignRight: false },
-  { id: 'societe', label: 'Societé', alignRight: false },
-  { id: 'cours', label: 'Achat', alignRight: false },
-  { id: 'qte', label: 'Vente', alignRight: false },
-  { id: 'brut', label: 'Quantite', alignRight: false },
-  { id: 'tax', label: '% Comm', alignRight: false },
+  { id: 'titre', label: 'Societé', alignRight: false },
+  { id: 'prixAchat', label: 'Achat', alignRight: false },
+  { id: 'prixVente', label: 'Vente', alignRight: false },
+  { id: 'quantite', label: 'Quantite', alignRight: false },
+  { id: 'taxValue', label: '% Comm', alignRight: false },
   { id: 'commAchat', label: 'Comm/Achat', alignRight: false },
   { id: 'commVente', label: 'Comm/Vente', alignRight: false },
-
   { id: 'pnl', label: '+/- Value', alignRight: false },
-  { id: '' },
 ];
 
 const TABLE_HEAD_IMMO = [
@@ -98,19 +98,6 @@ function getComparator(order, orderBy) {
     : (a, b) => -descendingComparator(a, b, orderBy);
 }
 
-function applySortFilter(array, comparator, query) {
-  const stabilizedThis = array.map((el, index) => [el, index]);
-  stabilizedThis.sort((a, b) => {
-    const order = comparator(a[0], b[0]);
-    if (order !== 0) return order;
-    return a[1] - b[1];
-  });
-  if (query) {
-    return filter(array, (_user) => _user.name.toLowerCase().indexOf(query.toLowerCase()) !== -1);
-  }
-  return stabilizedThis.map((el) => el[0]);
-}
-
 function formatNumber(number) {
   // Convert number to string
   const numberString = number.toString();
@@ -128,16 +115,6 @@ function formatNumber(number) {
   return `${formattedIntegerPart}${formattedDecimalPart}`;
 }
 
-function stableSort(array, comparator) {
-  const stabilizedThis = array.map((el, index) => [el, index]);
-  stabilizedThis.sort((a, b) => {
-    const order = comparator(a[0], b[0]);
-    if (order !== 0) return order;
-    return a[1] - b[1];
-  });
-  return stabilizedThis.map((el) => el[0]);
-}
-
 export default function HistoryPage() {
   const [open, setOpen] = useState(null);
 
@@ -147,7 +124,7 @@ export default function HistoryPage() {
 
   const [selected, setSelected] = useState([]);
 
-  const [orderBy, setOrderBy] = useState('date');
+  const [orderBy, setOrderBy] = useState('cours');
 
   const [filterName, setFilterName] = useState('');
 
@@ -249,6 +226,7 @@ export default function HistoryPage() {
   };
   useEffect(() => {
     getTransactionsList();
+    console.log(filteredData);
   }, []);
 
   const handleOpenMenu = (event) => {
@@ -260,6 +238,7 @@ export default function HistoryPage() {
   };
 
   const handleRequestSort = (event, property) => {
+    console.log(property);
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
@@ -272,36 +251,43 @@ export default function HistoryPage() {
     }
     setSelected([]);
   };
+
+  function stableSort(array, comparator) {
+    const stabilizedThis = array.map((el, index) => [el, index]);
+    stabilizedThis.sort((a, b) => {
+      const order = comparator(a[0], b[0]);
+
+      if (order !== 0) return order;
+      return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+  }
+  const formatDate = (timestamp) => {
+    if (!timestamp) return '';
+    return format(new Date(timestamp.seconds * 1000 + timestamp.nanoseconds / 1000000), 'yyyy-MM-dd HH:mm:ss');
+  };
   const filteredData = useMemo(() => {
     const beginTimestamp = new Date(beginFilterDate).getTime();
     const finishTimestamp = new Date(finishFilterDate).getTime();
-    // Filtering logic based on all filter parameters
     return transactions.filter((item) => {
-      // Example: Filter based on begin date
-      // Example: Filter based on begin date
       if (
         beginFilterDate &&
         (item.date?.seconds * 1000 < beginTimestamp || item.dateEngagement?.seconds * 1000 < beginTimestamp)
       ) {
         return false;
       }
-      // Example: Filter based on finish date
       if (
         finishFilterDate &&
         (item.date?.seconds * 1000 > finishTimestamp || item.dateEngagement?.seconds * 1000 > finishTimestamp)
       ) {
         return false;
       }
-      // Example: Filter based on selected titre
       if (selectedSocieteFiltre !== 'Titre' && item.titre !== selectedSocieteFiltre) {
         return false;
       }
-      // Example: Filter based on selected type
-
       if (selectedService && item.type !== selectedService.toLowerCase() && selectedService !== 'Tout') {
         return false;
       }
-
       return true;
     });
   }, [transactions, beginFilterDate, finishFilterDate, selectedSocieteFiltre, selectedService]);
@@ -345,6 +331,188 @@ export default function HistoryPage() {
       return row.prix * row.quantite - row.quantite * row.prix * row.taxValue;
     }
     return 0;
+  };
+
+  const mapHeadersToColumns = (headers) => {
+    return headers.map((header) => ({
+      field: header.id,
+      headerName: header.label,
+      align: header.alignRight ? 'right' : 'left',
+      width: 150,
+      editable: true,
+    }));
+  };
+  const calculateValues = (item) => {
+    const commAchat = item.prixAchat * item.taxValue * item.quantite;
+    const commVente = item.prixVente * item.taxValue * item.quantite;
+    const pnl = (item.prixVente - item.prixAchat) * item.quantite - (commAchat + commVente);
+    return { commAchat, commVente, pnl };
+  };
+  const DataGridComponent = ({ headers }) => {
+    const filteredDataAction = filteredData.filter((item) => item.type === 'action');
+
+    const [rows, setRows] = useState(
+      filteredDataAction.map((item) => {
+        const { commAchat, commVente, pnl } = calculateValues(item);
+
+        return {
+          id: item.id,
+          date: formatDate(item.date),
+          prixAchat: Number(item.prixAchat).toFixed(2),
+          prixVente: Number(item.prixVente).toFixed(2),
+          quantite: Number(item.quantite).toFixed(2),
+          commAchat: commAchat.toFixed(2),
+          commVente: commVente.toFixed(2),
+          pnl: pnl.toFixed(2),
+        };
+      })
+    );
+    const [editRowsModel, setEditRowsModel] = useState({});
+    const [editingRowId, setEditingRowId] = useState(null);
+
+    const handleEditClick = (id) => {
+      setEditingRowId(id);
+      setEditRowsModel({
+        [id]: { ...rows.find((row) => row.id === id) },
+      });
+    };
+
+    const handleSaveClick = () => {
+      const updatedRows = rows.map((row) => {
+        if (row.id === editingRowId) {
+          return { ...row, ...editRowsModel[editingRowId] };
+        }
+        return row;
+      });
+      setRows(updatedRows);
+      setEditingRowId(null);
+      setEditRowsModel({});
+    };
+
+    const handleCancelClick = () => {
+      setEditingRowId(null);
+      setEditRowsModel({});
+    };
+
+    const handleEditRowsModelChange = (model) => {
+      setEditRowsModel(model);
+    };
+
+    const columns = [
+      ...mapHeadersToColumns(headers),
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        width: 150,
+        renderCell: (params) => {
+          const isEditing = params.row.id === editingRowId;
+          return isEditing ? (
+            <>
+              <IconButton color="primary" onClick={handleSaveClick} style={{ marginRight: 10 }}>
+                <Save />
+              </IconButton>
+              <IconButton color="secondary" onClick={handleCancelClick}>
+                <Cancel />
+              </IconButton>
+            </>
+          ) : (
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              onClick={() => handleEditClick(params.row.id)}
+              style={{ marginRight: 10 }}
+            >
+              Edit
+            </Button>
+          );
+        },
+      },
+    ];
+    const localeText = {
+      // Define locale text properties here, or use the provided locale object
+      // For example:
+
+      noRowsLabel: 'Pas de lignes',
+      noResultsOverlayLabel: 'Pas de résultats',
+      errorOverlayDefaultLabel: "Une erreur s'est produite.",
+      filterPanelPlaceholder: 'Filtrer...',
+      filterPanelTitle: 'Filtre',
+      filterOperatorContains: 'contient',
+      filterOperatorEquals: 'égal',
+      filterOperatorNotEquals: 'différent',
+      filterOperatorStartsWith: 'commence par',
+      filterOperatorEndsWith: 'finit par',
+      filterOperatorIs: 'est',
+      filterOperatorNot: "n'est pas",
+      filterOperatorAfter: 'après',
+      filterOperatorOnOrAfter: 'le ou après',
+      filterOperatorBefore: 'avant',
+      filterOperatorOnOrBefore: 'le ou avant',
+      filterOperatorIsEmpty: 'est vide',
+      filterOperatorIsNotEmpty: "n'est pas vide",
+      filterValueAny: "n'importe quel",
+      filterValueTrue: 'vrai',
+      filterValueFalse: 'faux',
+      filterValueEmpty: 'vide',
+      filterValueNotEmpty: 'non vide',
+      filterValueBlanks: 'vides',
+      filterValueLoading: 'chargement...',
+      filterValueOperator: 'Opérateur',
+      filterValueColumns: 'Colonnes',
+      filterValueColumn: 'Colonne',
+      filterValueAnd: 'et',
+      filterValueOr: 'ou',
+      filterValueMultipleValues: '(valeurs multiples)',
+      filterValueMultipleValuesDelimiter: ',',
+      filterValueMultipleValuesStart: '(',
+      filterValueMultipleValuesEnd: ')',
+      filterValueMultipleValuesSelected: 'sélectionné',
+      filterValueMultipleValuesSelectAll: 'Tout sélectionner',
+      filterValueMultipleValuesSelectNone: 'Aucun',
+      filterValueMultipleValuesShowAll: 'Afficher tout',
+      filterValueMultipleValuesOrder: 'Ordre',
+      filterValueMultipleValuesOrderAsc: 'Ascendant',
+      filterValueMultipleValuesOrderDesc: 'Descendant',
+      filterValueMultipleValuesCase: 'Cas',
+      filterValueMultipleValuesCaseSensitive: 'Sensible à la casse',
+      filterValueMultipleValuesCaseInsensitive: 'Insensible à la casse',
+      filterValueMultipleValuesSearch: 'Rechercher',
+      filterValueMultipleValuesSelectedAll: 'Tout sélectionné',
+      filterValueMultipleValuesSelectedNone: 'Aucun sélectionné',
+      filterValueMultipleValuesSelectedSome: 'Sélectionné',
+      filterValueMultipleValuesSelectedMany: 'Beaucoup sélectionné',
+      filterValueMultipleValuesSelectedAllVisible: 'Tout sélectionné',
+      filterValueMultipleValuesSelectedNoneVisible: 'Aucun sélectionné',
+      filterValueMultipleValuesSelectedSomeVisible: 'Sélectionné',
+      filterValueMultipleValuesSelectedManyVisible: 'Beaucoup sélectionné',
+      filterValueMultipleValuesInvalidList: 'Liste invalide',
+      filterValueMultipleValuesLoadMore: 'Charger plus',
+      filterValueMultipleValuesSearchCount: '{count} trouvé',
+      filterValueMultipleValuesSearchCountAll: 'Tout trouvé ({count})',
+      filterValueMultipleValuesSearchPlaceholder: 'Rechercher...',
+      filterValueMultipleValuesSearchEmpty: 'Aucun résultat',
+      filterValueSortAscending: 'Tri croissant',
+      filterValueSortDescending: 'Tri décroissant',
+
+      // Add other localization properties as needed
+    };
+    return (
+      <div style={{ height: 600, width: '100%' }}>
+        <DataGrid
+          localeText={frFR.components.MuiDataGrid.defaultProps.localeText}
+          rows={rows}
+          columns={columns}
+          editRowsModel={editRowsModel}
+          onEditRowsModelChange={handleEditRowsModelChange}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'date', sort: 'desc' }],
+            },
+          }}
+        />
+      </div>
+    );
   };
 
   const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte, pnlAction, totalTVA, globalPnl, taxImmoTotal } =
@@ -1112,6 +1280,7 @@ export default function HistoryPage() {
             onRequestSort={handleRequestSort}
             onSelectAllClick={handleSelectAllClick}
           />
+
           <TableBody>
             {filteredData.map((row) => {
               const { id, date, dateEngagement, datePaiement, titre, prixAchat, prixVente, quantite, type, taxValue } =
@@ -1477,7 +1646,7 @@ export default function HistoryPage() {
                     Actions
                   </Typography>
                 </Stack>
-
+                <DataGridComponent headers={TABLE_HEAD} />
                 <ActionContainerTable height={400} />
                 <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={2}>
                   <Stack direction={'column'}>
