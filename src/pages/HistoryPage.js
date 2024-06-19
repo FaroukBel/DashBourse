@@ -51,34 +51,29 @@ import { db } from '../config/firebase-config';
 
 const TABLE_HEAD = [
   { id: 'date', label: 'Date', alignRight: false },
-  { id: 'titre', label: 'Societé', alignRight: false },
+  { id: 'societe', label: 'Societé', alignRight: false, width: 400 },
   { id: 'prixAchat', label: 'Achat', alignRight: false },
   { id: 'prixVente', label: 'Vente', alignRight: false },
   { id: 'quantite', label: 'Quantite', alignRight: false },
-  { id: 'taxValue', label: '% Comm', alignRight: false },
+  { id: 'taxValues', label: '% Comm', alignRight: false },
   { id: 'commAchat', label: 'Comm/Achat', alignRight: false },
   { id: 'commVente', label: 'Comm/Vente', alignRight: false },
-  { id: 'pnl', label: '+/- Value', alignRight: false },
 ];
 
 const TABLE_HEAD_IMMO = [
   { id: 'date', label: 'Date', alignRight: false },
 
-  { id: 'societe', label: 'Societé', alignRight: false },
-  { id: 'cours', label: 'Motant', alignRight: false },
-  { id: '' },
+  { id: 'societe', label: 'Societé', alignRight: false, width: 400 },
+  { id: 'prix', label: 'Motant', alignRight: false, width: 400 },
 ];
 
 const TABLE_HEAD_DIVIDENDE = [
   { id: 'date', label: 'Date', alignRight: false },
   { id: 'datePaiement', label: 'Date Paiement', alignRight: false },
-  { id: 'societe', label: 'Societé', alignRight: false },
+  { id: 'societe', label: 'Societé', alignRight: false, width: 400 },
   { id: 'cours', label: 'Cours', alignRight: false },
-  { id: 'brut', label: 'Quantite', alignRight: false },
-  { id: 'commAchat', label: 'IGR', alignRight: false },
-
-  { id: 'pnl', label: '+/- Value', alignRight: false },
-  { id: '' },
+  { id: 'qte', label: 'Quantite', alignRight: false },
+  { id: 'igr', label: 'IGR', alignRight: false },
 ];
 // ----------------------------------------------------------------------
 
@@ -112,7 +107,7 @@ function formatNumber(number) {
   const formattedDecimalPart = decimalPart ? `,${decimalPart}` : '';
 
   // Combine the formatted integer part and the decimal part
-  return `${formattedIntegerPart}${formattedDecimalPart}`;
+  return `${formattedIntegerPart}${formattedDecimalPart} DH`;
 }
 
 export default function HistoryPage() {
@@ -226,7 +221,6 @@ export default function HistoryPage() {
   };
   useEffect(() => {
     getTransactionsList();
-    console.log(filteredData);
   }, []);
 
   const handleOpenMenu = (event) => {
@@ -238,7 +232,6 @@ export default function HistoryPage() {
   };
 
   const handleRequestSort = (event, property) => {
-    console.log(property);
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
@@ -317,11 +310,7 @@ export default function HistoryPage() {
     setRowsPerPage(parseInt(event.target.value, 10));
   };
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - transactions.length) : 0;
-
   const sortedData = stableSort(filteredData, getComparator(order, orderBy));
-
-  const isNotFound = !sortedData.length && !!filterName;
 
   const calculateTransactionValue = (row) => {
     if (row.type === 'achat') {
@@ -338,32 +327,40 @@ export default function HistoryPage() {
       field: header.id,
       headerName: header.label,
       align: header.alignRight ? 'right' : 'left',
-      width: 150,
+      width: header.width || 150,
       editable: true,
     }));
   };
-  const calculateValues = (item) => {
+  const calculateActionValues = (item) => {
     const commAchat = item.prixAchat * item.taxValue * item.quantite;
     const commVente = item.prixVente * item.taxValue * item.quantite;
     const pnl = (item.prixVente - item.prixAchat) * item.quantite - (commAchat + commVente);
     return { commAchat, commVente, pnl };
   };
-  const DataGridComponent = ({ headers }) => {
+  const calculateDiviValues = (item) => {
+    const igr = item.prix * item.quantite * 0.15;
+
+    const pnl = item.prix * item.quantite - igr;
+    return { igr, pnl };
+  };
+  const DataGridComponentAction = ({ headers }) => {
     const filteredDataAction = filteredData.filter((item) => item.type === 'action');
 
     const [rows, setRows] = useState(
       filteredDataAction.map((item) => {
-        const { commAchat, commVente, pnl } = calculateValues(item);
+        const { commAchat, commVente, pnl } = calculateActionValues(item);
 
         return {
           id: item.id,
           date: formatDate(item.date),
-          prixAchat: Number(item.prixAchat).toFixed(2),
-          prixVente: Number(item.prixVente).toFixed(2),
-          quantite: Number(item.quantite).toFixed(2),
-          commAchat: commAchat.toFixed(2),
-          commVente: commVente.toFixed(2),
-          pnl: pnl.toFixed(2),
+          societe: item.titre,
+          taxValues: item.taxValue,
+          prixAchat: Number(Number(item.prixAchat).toFixed(2)),
+          prixVente: Number(Number(item.prixVente).toFixed(2)),
+          quantite: Number(Number(item.quantite).toFixed(2)),
+          commAchat: Number(commAchat.toFixed(2)),
+          commVente: Number(commVente.toFixed(2)),
+          pnl: Number(pnl.toFixed(2)),
         };
       })
     );
@@ -401,6 +398,33 @@ export default function HistoryPage() {
     const columns = [
       ...mapHeadersToColumns(headers),
       {
+        field: 'pnl',
+        headerName: 'PnL',
+        width: 150,
+        renderCell: (params) => {
+          const isEditing = params.row.id === editingRowId;
+          return isEditing ? (
+            <TextField
+              type={'number'}
+              value={editRowsModel[editingRowId].pnl}
+              onChange={(event) => {
+                setEditRowsModel({
+                  ...editRowsModel,
+                  [editingRowId]: {
+                    ...editRowsModel[editingRowId],
+                    pnl: event.target.value,
+                  },
+                });
+              }}
+            />
+          ) : (
+            <Typography color={params.row.pnl > 0 ? '#019875' : '#e8305f'} variant="body2">
+              {formatNumber(params.row.pnl)}
+            </Typography>
+          );
+        },
+      },
+      {
         field: 'actions',
         headerName: 'Actions',
         width: 150,
@@ -423,84 +447,15 @@ export default function HistoryPage() {
               onClick={() => handleEditClick(params.row.id)}
               style={{ marginRight: 10 }}
             >
-              Edit
+              <Iconify icon="mdi:pencil" />
             </Button>
           );
         },
       },
     ];
-    const localeText = {
-      // Define locale text properties here, or use the provided locale object
-      // For example:
-
-      noRowsLabel: 'Pas de lignes',
-      noResultsOverlayLabel: 'Pas de résultats',
-      errorOverlayDefaultLabel: "Une erreur s'est produite.",
-      filterPanelPlaceholder: 'Filtrer...',
-      filterPanelTitle: 'Filtre',
-      filterOperatorContains: 'contient',
-      filterOperatorEquals: 'égal',
-      filterOperatorNotEquals: 'différent',
-      filterOperatorStartsWith: 'commence par',
-      filterOperatorEndsWith: 'finit par',
-      filterOperatorIs: 'est',
-      filterOperatorNot: "n'est pas",
-      filterOperatorAfter: 'après',
-      filterOperatorOnOrAfter: 'le ou après',
-      filterOperatorBefore: 'avant',
-      filterOperatorOnOrBefore: 'le ou avant',
-      filterOperatorIsEmpty: 'est vide',
-      filterOperatorIsNotEmpty: "n'est pas vide",
-      filterValueAny: "n'importe quel",
-      filterValueTrue: 'vrai',
-      filterValueFalse: 'faux',
-      filterValueEmpty: 'vide',
-      filterValueNotEmpty: 'non vide',
-      filterValueBlanks: 'vides',
-      filterValueLoading: 'chargement...',
-      filterValueOperator: 'Opérateur',
-      filterValueColumns: 'Colonnes',
-      filterValueColumn: 'Colonne',
-      filterValueAnd: 'et',
-      filterValueOr: 'ou',
-      filterValueMultipleValues: '(valeurs multiples)',
-      filterValueMultipleValuesDelimiter: ',',
-      filterValueMultipleValuesStart: '(',
-      filterValueMultipleValuesEnd: ')',
-      filterValueMultipleValuesSelected: 'sélectionné',
-      filterValueMultipleValuesSelectAll: 'Tout sélectionner',
-      filterValueMultipleValuesSelectNone: 'Aucun',
-      filterValueMultipleValuesShowAll: 'Afficher tout',
-      filterValueMultipleValuesOrder: 'Ordre',
-      filterValueMultipleValuesOrderAsc: 'Ascendant',
-      filterValueMultipleValuesOrderDesc: 'Descendant',
-      filterValueMultipleValuesCase: 'Cas',
-      filterValueMultipleValuesCaseSensitive: 'Sensible à la casse',
-      filterValueMultipleValuesCaseInsensitive: 'Insensible à la casse',
-      filterValueMultipleValuesSearch: 'Rechercher',
-      filterValueMultipleValuesSelectedAll: 'Tout sélectionné',
-      filterValueMultipleValuesSelectedNone: 'Aucun sélectionné',
-      filterValueMultipleValuesSelectedSome: 'Sélectionné',
-      filterValueMultipleValuesSelectedMany: 'Beaucoup sélectionné',
-      filterValueMultipleValuesSelectedAllVisible: 'Tout sélectionné',
-      filterValueMultipleValuesSelectedNoneVisible: 'Aucun sélectionné',
-      filterValueMultipleValuesSelectedSomeVisible: 'Sélectionné',
-      filterValueMultipleValuesSelectedManyVisible: 'Beaucoup sélectionné',
-      filterValueMultipleValuesInvalidList: 'Liste invalide',
-      filterValueMultipleValuesLoadMore: 'Charger plus',
-      filterValueMultipleValuesSearchCount: '{count} trouvé',
-      filterValueMultipleValuesSearchCountAll: 'Tout trouvé ({count})',
-      filterValueMultipleValuesSearchPlaceholder: 'Rechercher...',
-      filterValueMultipleValuesSearchEmpty: 'Aucun résultat',
-      filterValueSortAscending: 'Tri croissant',
-      filterValueSortDescending: 'Tri décroissant',
-
-      // Add other localization properties as needed
-    };
     return (
       <div style={{ height: 600, width: '100%' }}>
         <DataGrid
-          localeText={frFR.components.MuiDataGrid.defaultProps.localeText}
           rows={rows}
           columns={columns}
           editRowsModel={editRowsModel}
@@ -514,7 +469,223 @@ export default function HistoryPage() {
       </div>
     );
   };
+  const DataGridComponentDividende = ({ headers }) => {
+    const filteredDataAction = filteredData.filter((item) => item.type === 'dividende');
 
+    const [rows, setRows] = useState(
+      filteredDataAction.map((item) => {
+        const { igr, pnl } = calculateDiviValues(item);
+
+        return {
+          id: item.id,
+          date: formatDate(item.dateEngagement),
+          datePaiement: formatDate(item.datePaiement),
+          societe: item.titre,
+          cours: Number(Number(item.prix).toFixed(2)),
+          qte: Number(Number(item.quantite).toFixed(2)),
+          igr: Number(Number(igr).toFixed(2)),
+          pnl: Number(pnl.toFixed(2)),
+        };
+      })
+    );
+    const [editRowsModel, setEditRowsModel] = useState({});
+    const [editingRowId, setEditingRowId] = useState(null);
+
+    const handleEditClick = (id) => {
+      setEditingRowId(id);
+      setEditRowsModel({
+        [id]: { ...rows.find((row) => row.id === id) },
+      });
+    };
+
+    const handleSaveClick = () => {
+      const updatedRows = rows.map((row) => {
+        if (row.id === editingRowId) {
+          return { ...row, ...editRowsModel[editingRowId] };
+        }
+        return row;
+      });
+      setRows(updatedRows);
+      setEditingRowId(null);
+      setEditRowsModel({});
+    };
+
+    const handleCancelClick = () => {
+      setEditingRowId(null);
+      setEditRowsModel({});
+    };
+
+    const handleEditRowsModelChange = (model) => {
+      setEditRowsModel(model);
+    };
+
+    const columns = [
+      ...mapHeadersToColumns(headers),
+      {
+        field: 'pnl',
+        headerName: 'PnL',
+        width: 150,
+        renderCell: (params) => {
+          const isEditing = params.row.id === editingRowId;
+          return isEditing ? (
+            <TextField
+              type={'number'}
+              value={editRowsModel[editingRowId].pnl}
+              onChange={(event) => {
+                setEditRowsModel({
+                  ...editRowsModel,
+                  [editingRowId]: {
+                    ...editRowsModel[editingRowId],
+                    pnl: event.target.value,
+                  },
+                });
+              }}
+            />
+          ) : (
+            <Typography color={params.row.pnl > 0 ? '#019875' : '#e8305f'} variant="body2">
+              {formatNumber(params.row.pnl)}
+            </Typography>
+          );
+        },
+      },
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        width: 150,
+        renderCell: (params) => {
+          const isEditing = params.row.id === editingRowId;
+          return isEditing ? (
+            <>
+              <IconButton color="primary" onClick={handleSaveClick} style={{ marginRight: 10 }}>
+                <Save />
+              </IconButton>
+              <IconButton color="secondary" onClick={handleCancelClick}>
+                <Cancel />
+              </IconButton>
+            </>
+          ) : (
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              onClick={() => handleEditClick(params.row.id)}
+              style={{ marginRight: 10 }}
+            >
+              <Iconify icon="mdi:pencil" />
+            </Button>
+          );
+        },
+      },
+    ];
+    return (
+      <div style={{ height: 600, width: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          editRowsModel={editRowsModel}
+          onEditRowsModelChange={handleEditRowsModelChange}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'date', sort: 'desc' }],
+            },
+          }}
+        />
+      </div>
+    );
+  };
+  const DataGridComponentTax = ({ headers }) => {
+    const filteredDataAction = filteredData.filter((item) => item.type === 'tax immobiliere');
+
+    const [rows, setRows] = useState(
+      filteredDataAction.map((item) => {
+        return {
+          id: item.id,
+          date: formatDate(item.date),
+          prix: formatNumber(item.prix),
+          societe: item.titre,
+        };
+      })
+    );
+    const [editRowsModel, setEditRowsModel] = useState({});
+    const [editingRowId, setEditingRowId] = useState(null);
+
+    const handleEditClick = (id) => {
+      setEditingRowId(id);
+      setEditRowsModel({
+        [id]: { ...rows.find((row) => row.id === id) },
+      });
+    };
+
+    const handleSaveClick = () => {
+      const updatedRows = rows.map((row) => {
+        if (row.id === editingRowId) {
+          return { ...row, ...editRowsModel[editingRowId] };
+        }
+        return row;
+      });
+      setRows(updatedRows);
+      setEditingRowId(null);
+      setEditRowsModel({});
+    };
+
+    const handleCancelClick = () => {
+      setEditingRowId(null);
+      setEditRowsModel({});
+    };
+
+    const handleEditRowsModelChange = (model) => {
+      setEditRowsModel(model);
+    };
+
+    const columns = [
+      ...mapHeadersToColumns(headers),
+
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        width: 150,
+        renderCell: (params) => {
+          const isEditing = params.row.id === editingRowId;
+          return isEditing ? (
+            <>
+              <IconButton color="primary" onClick={handleSaveClick} style={{ marginRight: 10 }}>
+                <Save />
+              </IconButton>
+              <IconButton color="secondary" onClick={handleCancelClick}>
+                <Cancel />
+              </IconButton>
+            </>
+          ) : (
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              onClick={() => handleEditClick(params.row.id)}
+              style={{ marginRight: 10 }}
+            >
+              <Iconify icon="mdi:pencil" />
+            </Button>
+          );
+        },
+      },
+    ];
+
+    return (
+      <div style={{ height: 600, width: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          editRowsModel={editRowsModel}
+          onEditRowsModelChange={handleEditRowsModelChange}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'date', sort: 'desc' }],
+            },
+          }}
+        />
+      </div>
+    );
+  };
   const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte, pnlAction, totalTVA, globalPnl, taxImmoTotal } =
     filteredData.reduce(
       (acc, value) => {
@@ -1646,8 +1817,8 @@ export default function HistoryPage() {
                     Actions
                   </Typography>
                 </Stack>
-                <DataGridComponent headers={TABLE_HEAD} />
-                <ActionContainerTable height={400} />
+                <DataGridComponentAction headers={TABLE_HEAD} />
+                {/* <ActionContainerTable height={400} /> */}
                 <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={2}>
                   <Stack direction={'column'}>
                     <Typography variant="h4">Total action</Typography>
@@ -1671,8 +1842,9 @@ export default function HistoryPage() {
                     Dividendes
                   </Typography>
                 </Stack>
+                <DataGridComponentDividende headers={TABLE_HEAD_DIVIDENDE} />
 
-                <DividendeContainerTable height={400} />
+                {/* <DividendeContainerTable height={400} /> */}
                 <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={2}>
                   <Stack direction={'column'}>
                     <Typography variant="h4">Total dividende</Typography>
@@ -1696,7 +1868,8 @@ export default function HistoryPage() {
                     Tax Immobiliere
                   </Typography>
                 </Stack>
-                <TaxContainerTable height={400} />
+                <DataGridComponentTax headers={TABLE_HEAD_IMMO} />
+                {/* <TaxContainerTable height={400} /> */}
                 <Stack direction={'row-reverse'} spacing={3} marginTop={3} marginX={3} marginBottom={3}>
                   <Stack direction={'column'}>
                     <Typography variant="h4">Total tax immobiliere</Typography>
