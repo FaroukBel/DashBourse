@@ -38,6 +38,7 @@ export default function Searchbar() {
   const [open, setOpen] = useState(false);
 
   const [transactions, setTransactions] = useState([]);
+  const [sysTransactions, setSysTransactions] = useState([]);
   const handleOpen = () => {
     setOpen(!open);
   };
@@ -47,6 +48,19 @@ export default function Searchbar() {
   };
 
   const listTransactionRef = collection(db, 'bank_transactions');
+  const listTransactionRefSys = collection(db, 'Transactions');
+
+  const getSystTransactionsList = async () => {
+    const transactionSnapshot = await getDocs(listTransactionRefSys);
+
+    const transactionListData = transactionSnapshot.docs.map((doc) => ({
+      ...doc.data(),
+      id: doc.id,
+    }));
+    console.log(transactionListData);
+    setSysTransactions(transactionListData);
+  };
+
   const getTransactionsList = async () => {
     const transactionSnapshot = await getDocs(listTransactionRef);
 
@@ -59,31 +73,96 @@ export default function Searchbar() {
 
   useEffect(() => {
     getTransactionsList();
+    getSystTransactionsList();
   }, []);
 
-  const { totalAchat, totalVente, totalQuantite, totalDiv, totalDivQte, pnlAction, totalTVA, globalPnl, taxImmoTotal } =
-    transactions.reduce(
-      (acc, value) => {
-        // Parse fields as numbers and handle missing fields
-        const type = value.av || 'achat';
-        const prix = parseFloat(value.montant) || 0;
-        // Calculate global pnl
-        if (type === 'achat') {
-          acc.totalAchat += parseFloat(prix);
-        } else {
-          acc.totalVente += parseFloat(prix);
-        }
-
-        acc.globalPnl = acc.totalVente - acc.totalAchat;
-
-        return acc;
-      },
-      {
-        totalAchat: 0,
-        totalVente: 0,
-        globalPnl: 0,
+  const { globalPnl } = transactions.reduce(
+    (acc, value) => {
+      // Parse fields as numbers and handle missing fields
+      const type = value.av || 'achat';
+      const prix = parseFloat(value.montant) || 0;
+      // Calculate global pnl
+      if (type === 'achat') {
+        acc.totalAchat += parseFloat(prix);
+      } else {
+        acc.totalVente += parseFloat(prix);
       }
-    );
+
+      acc.globalPnl = acc.totalVente - acc.totalAchat;
+
+      return acc;
+    },
+    {
+      totalAchat: 0,
+      totalVente: 0,
+      globalPnl: 0,
+    }
+  );
+
+  const {
+    totalAchat,
+    totalVente,
+    totalQuantite,
+    totalDiv,
+    totalDivQte,
+    pnlAction,
+    totalTVA,
+    globalSysPnl,
+    taxImmoTotal,
+  } = sysTransactions.reduce(
+    (acc, value) => {
+      // Parse fields as numbers and handle missing fields
+      const prixAchat = parseFloat(value.prixAchat) || 0;
+      const prixVente = parseFloat(value.prixVente) || 0;
+      const quantite = parseFloat(value.quantite) || 0;
+      const taxValue = parseFloat(value.taxValue) || 0;
+      const prix = parseFloat(value.prix) || 0;
+
+      // Calculate total purchase and sale amounts with tax
+      acc.totalAchat += prixAchat * quantite + quantite * prixAchat * taxValue;
+      acc.totalVente += prixVente * quantite - quantite * prixVente * taxValue;
+
+      // Calculate profit and loss
+      const vente = prixVente * quantite - quantite * prixVente * taxValue;
+      const achat = prixAchat * quantite + quantite * prixAchat * taxValue;
+
+      if (vente - achat < 0) {
+        acc.pnlAction += vente - achat;
+      } else {
+        acc.totalTVA += (vente - achat) * 0.15;
+        acc.pnlAction += vente - achat - (vente - achat) * 0.15;
+      }
+
+      // Calculate total dividends
+      if (value.type === 'dividende') {
+        acc.totalDiv += prix * quantite;
+        acc.totalDivQte += quantite;
+      }
+      if (value.type === 'tax immobiliere') {
+        acc.taxImmoTotal += prix;
+      }
+      // Calculate total quantity
+      acc.totalQuantite += quantite;
+      const igrDividende = (acc.totalDiv * 0.15).toFixed(2);
+      // Calculate global pnl
+      acc.globalSysPnl =
+        parseFloat(acc.pnlAction) + parseFloat(acc.totalDiv - igrDividende) + parseFloat(acc.taxImmoTotal);
+
+      return acc;
+    },
+    {
+      totalAchat: 0,
+      totalVente: 0,
+      totalQuantite: 0,
+      totalDiv: 0,
+      totalDivQte: 0,
+      pnlAction: 0,
+      totalTVA: 0,
+      globalSysPnl: 0,
+      taxImmoTotal: 0,
+    }
+  );
+
   function formatNumber(number) {
     // Convert number to string
     const numberString = number.toString();
@@ -102,30 +181,52 @@ export default function Searchbar() {
   }
   return (
     <ClickAwayListener onClickAway={handleClose}>
-   
-      <Stack direction="row-reverse" width={'100%'} fullWidth mx={3}>
+      <Stack direction="row" width={'100%'} fullWidth mx={3}>
         <Stack direction={'row'}>
           <Typography
             variant="h6"
             color={'text.primary'}
             sx={{
               fontWeight: 'bold',
-              fontSize: '1.5rem',
+              fontSize: '2rem !important',
             }}
           >
-            +/- Value
+            Solde banquaire:
           </Typography>
           <Typography
             variant="h6"
             sx={{
               color: globalPnl > 0 ? 'success.main' : 'error.main',
               fontWeight: 'bold',
-              fontSize: '1.5rem',
+              fontSize: '2rem !important',
               ml: 2,
               mr: 2,
             }}
           >
             {formatNumber(globalPnl.toFixed(2))} DH
+          </Typography>
+          <Typography
+            variant="h6"
+            color={'text.primary'}
+            sx={{
+              fontWeight: 'bold',
+              fontSize: '2rem !important',
+            }}
+          >
+            +/- Value:
+          </Typography>
+          <Typography
+            variant="h6"
+            sx={{
+              color: globalSysPnl > 0 ? 'success.main' : 'error.main',
+              fontWeight: 'bold',
+              fontSize: '2rem !important',
+
+              ml: 2,
+              mr: 2,
+            }}
+          >
+            {formatNumber(globalSysPnl.toFixed(2))} DH
           </Typography>
         </Stack>
       </Stack>

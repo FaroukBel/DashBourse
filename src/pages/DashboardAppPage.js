@@ -2,10 +2,12 @@ import { Helmet } from 'react-helmet-async';
 import { faker } from '@faker-js/faker';
 // @mui
 import { useTheme } from '@mui/material/styles';
-import { Grid, Button, Container, Typography } from '@mui/material';
+import { Card, Grid, Button, Container, Typography } from '@mui/material';
 import { collection, getDocs } from 'firebase/firestore';
+import { DataGrid } from '@mui/x-data-grid';
 import { useEffect, useState } from 'react';
 // components
+
 import Iconify from '../components/iconify';
 // sections
 import {
@@ -27,6 +29,7 @@ export default function DashboardAppPage() {
   const [transactions, setTransactions] = useState([]);
   const [titleTotalsAchat, setTitleTotalsAchat] = useState([]);
   const [titleTotalsPNL, setTitleTotalsPNL] = useState([]);
+  const [statsData, setStatsData] = useState([]);
   const listTransactionRef = collection(db, 'bank_transactions');
   const [groupByTitre, setGroupByTitre] = useState([]);
 
@@ -52,6 +55,7 @@ export default function DashboardAppPage() {
         formattedDate, // Add formatted date to the object
       };
     });
+    console.log(transactionListData);
     setTransactions(transactionListData);
     const titleTotalsPNL = transactionListData.reduce((acc, row) => {
       if (!acc[row.titre]) {
@@ -93,6 +97,9 @@ export default function DashboardAppPage() {
   useEffect(() => {
     getTransactionsList();
   }, []);
+  useEffect(() => {
+    handleQuantiteDifference();
+  }, [transactions]);
 
   const handleCompChange = (type) => {
     if (type === 'Nbr. Action') {
@@ -108,6 +115,57 @@ export default function DashboardAppPage() {
       setGroupByTitre(titleTotalsPNL);
     }
   };
+  function formatNumber(number) {
+    // Convert number to string
+    const dotNumber = number.toFixed(2);
+    const numberString = dotNumber.toString();
+
+    // Split the number into integer and decimal parts
+    const [integerPart, decimalPart] = numberString.split('.');
+
+    // Format the integer part with periods as thousand separators
+    const formattedIntegerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+    // Format the decimal part, if it exists
+    const formattedDecimalPart = decimalPart ? `,${decimalPart}` : '';
+
+    // Combine the formatted integer part and the decimal part
+    return `${formattedIntegerPart}${formattedDecimalPart} DH`;
+  }
+  const handleQuantiteDifference = () => {
+    // Group transactions by 'Titre'
+    const groupedTransactions = transactions.reduce((acc, row) => {
+      if (row.titre === 'Titre') return acc;
+      if (!acc[row.titre]) {
+        acc[row.titre] = { achat: 0, vente: 0, montantAchat: 0, montantVente: 0 };
+      }
+      if (row.av === 'achat') {
+        acc[row.titre].achat += Number(row.quantite);
+        acc[row.titre].montantAchat += Number(row.montant);
+      } else if (row.av === 'vente') {
+        acc[row.titre].vente += Number(row.quantite);
+        acc[row.titre].montantVente += Number(row.montant);
+      }
+      return acc;
+    }, {});
+
+    // Calculate the difference for both Quantite and Montant, then format the result
+    const result = Object.keys(groupedTransactions).map((titre) => ({
+      id: titre,
+      quantiteDifference: groupedTransactions[titre].vente - groupedTransactions[titre].achat,
+      montantDifference: groupedTransactions[titre].montantVente - groupedTransactions[titre].montantAchat,
+    }));
+
+    // Sort the result: prioritize non-zero quantite differences and then by descending order
+    result.sort((a, b) => {
+      if (a.quantiteDifference === 0) return 1; // Push zero quantite values to the end
+      if (b.quantiteDifference === 0) return -1; // Push zero quantite values to the end
+      return b.quantiteDifference - a.quantiteDifference; // Descending order for non-zero quantite
+    });
+    setStatsData(result);
+    console.log(result);
+    return result;
+  };
 
   return (
     <>
@@ -117,6 +175,63 @@ export default function DashboardAppPage() {
 
       <Container maxWidth="xl">
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Card
+              style={{
+                padding: '20px',
+              }}
+            >
+              <Typography variant="h4" sx={{ mb: 5 }}>
+                Resultats
+              </Typography>
+              <DataGrid
+                rows={statsData}
+                columns={[
+                  { field: 'id', headerName: 'Titre', width: 400 },
+                  {
+                    field: 'montantDifference',
+                    headerName: '+/- Value',
+                    width: 300,
+                    renderCell: ({ value }) => (
+                      <Typography variant="h6" color={value > 0 ? '#019875' : '#e8305f'} sx={{ textTransform: 'none' }}>
+                        {formatNumber(value)}
+                      </Typography>
+                    ),
+                  },
+                  {
+                    field: 'quantiteDifference',
+                    headerName: 'Difference Qte',
+                    width: 300,
+                    renderCell: ({ value }) => (
+                      <Typography
+                        variant="h6"
+                        color={value > 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        {value}
+                      </Typography>
+                    ),
+                  },
+                ]}
+                style={{ height: 400, width: '100%' }}
+                rowsPerPageOptions={[5]}
+                pageSize={5}
+                disableRowSelectionOnClick
+                disableMultipleRowSelection
+                checkboxSelection={false}
+                disableColumnMenu
+                sx={{
+                  '& .MuiDataGrid-cell': {
+                    border: '1px solid rgba(200, 200, 200, 1)',
+                  },
+                  '& .MuiDataGrid-row': {
+                    borderBottom: '1px solid rgba(200, 200, 200, 1)',
+                  },
+                }}
+              />
+            </Card>
+          </Grid>
+
           <Grid item xs={12} md={6} lg={8}>
             <AppConversionRates
               title="Conversion Rates"

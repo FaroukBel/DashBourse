@@ -465,6 +465,14 @@ export default function HistoryPage() {
               sortModel: [{ field: 'date', sort: 'desc' }],
             },
           }}
+          sx={{
+            '& .MuiDataGrid-cell': {
+              border: '1px solid rgba(200, 200, 200, 1)',
+            },
+            '& .MuiDataGrid-row': {
+              borderBottom: '1px solid rgba(200, 200, 200, 1)',
+            },
+          }}
         />
       </div>
     );
@@ -589,6 +597,14 @@ export default function HistoryPage() {
               sortModel: [{ field: 'date', sort: 'desc' }],
             },
           }}
+          sx={{
+            '& .MuiDataGrid-cell': {
+              border: '1px solid rgba(200, 200, 200, 1)',
+            },
+            '& .MuiDataGrid-row': {
+              borderBottom: '1px solid rgba(200, 200, 200, 1)',
+            },
+          }}
         />
       </div>
     );
@@ -680,6 +696,14 @@ export default function HistoryPage() {
           initialState={{
             sorting: {
               sortModel: [{ field: 'date', sort: 'desc' }],
+            },
+          }}
+          sx={{
+            '& .MuiDataGrid-cell': {
+              border: '1px solid rgba(200, 200, 200, 1)',
+            },
+            '& .MuiDataGrid-row': {
+              borderBottom: '1px solid rgba(200, 200, 200, 1)',
             },
           }}
         />
@@ -1967,40 +1991,26 @@ export default function HistoryPage() {
                 {selectedService === 'Dividende' && (
                   <TextField
                     variant="outlined"
-                    style={
-                      totalDividende > 0
-                        ? { color: 'rgb(241, 255, 244)' }
-                        : totalDividende < 0
-                        ? { color: 'rgb(255, 247, 247)' }
-                        : { backgroundColor: 'white' }
-                    }
+                    inputProps={{ style: { color: totalDividende > 0 ? '#019875' : '#e8305f' } }}
                     value={totalDividende}
                   />
                 )}
                 {selectedService === 'Action' && (
                   <TextField
                     variant="outlined"
-                    style={
-                      pnlAction > 0
-                        ? { color: 'rgb(241, 255, 244)' }
-                        : pnlAction < 0
-                        ? { color: 'rgb(255, 247, 247)' }
-                        : { backgroundColor: 'white' }
-                    }
                     value={formatNumber(pnlAction.toFixed(2))}
+                    InputProps={{
+                      style: {
+                        color: pnlAction > 0 ? '#019875' : '#e8305f',
+                      },
+                    }}
                   />
                 )}
 
                 {selectedService === 'tax immobiliere' && (
                   <TextField
                     variant="outlined"
-                    style={
-                      totalTaxValues > 0
-                        ? { color: 'rgb(241, 255, 244)' }
-                        : totalTaxValues < 0
-                        ? { color: 'rgb(255, 247, 247)' }
-                        : { backgroundColor: 'white' }
-                    }
+                    inputProps={{ style: { color: taxImmoTotal > 0 ? '#019875' : '#e8305f' } }}
                     value={totalTaxValues}
                   />
                 )}
