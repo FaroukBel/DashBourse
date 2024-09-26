@@ -57,7 +57,6 @@ export default function Searchbar() {
       ...doc.data(),
       id: doc.id,
     }));
-    console.log(transactionListData);
     setSysTransactions(transactionListData);
   };
 

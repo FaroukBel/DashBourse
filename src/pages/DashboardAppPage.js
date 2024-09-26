@@ -27,14 +27,17 @@ import { db } from '../config/firebase-config';
 export default function DashboardAppPage() {
   const theme = useTheme();
   const [transactions, setTransactions] = useState([]);
+  const [sysTransactions, setSysTransactions] = useState([]);
   const [titleTotalsAchat, setTitleTotalsAchat] = useState([]);
   const [titleTotalsPNL, setTitleTotalsPNL] = useState([]);
   const [statsData, setStatsData] = useState([]);
   const listTransactionRef = collection(db, 'bank_transactions');
+  const listTransactionRefSys = collection(db, 'Transactions');
   const [groupByTitre, setGroupByTitre] = useState([]);
 
   const getTransactionsList = async () => {
     const transactionSnapshot = await getDocs(listTransactionRef);
+
 
     const transactionListData = transactionSnapshot.docs.map((doc) => {
       const transactionData = doc.data();
@@ -55,7 +58,6 @@ export default function DashboardAppPage() {
         formattedDate, // Add formatted date to the object
       };
     });
-    console.log(transactionListData);
     setTransactions(transactionListData);
     const titleTotalsPNL = transactionListData.reduce((acc, row) => {
       if (!acc[row.titre]) {
@@ -94,12 +96,56 @@ export default function DashboardAppPage() {
     setTitleTotalsAchat(formattedTitleTotalsAchat);
     setGroupByTitre(formattedTitleTotalsAchat);
   };
+
+
+
+  const getSysTransactionsList = async () => {
+    try {
+      const listTransactionSys = await getDocs(listTransactionRefSys);
+
+      const transactionListDataSys = listTransactionSys.docs.map((doc) => {
+        const transactionDataSys = doc.data();
+
+        // Check if the 'date' field exists and is in the Firestore timestamp format
+        let transactionDateSys;
+        if (transactionDataSys.date && transactionDataSys.date.seconds) {
+          // Convert Firestore timestamp object (seconds + nanoseconds) to JavaScript Date
+          transactionDateSys = new Date(transactionDataSys.date.seconds * 1000 + transactionDataSys.date.nanoseconds / 1000000);
+        } else {
+          transactionDateSys = new Date(); // Fallback to current date if the date is missing or in an unexpected format
+        }
+
+        const transactionDaySys = transactionDateSys.getDate();
+        const transactionMonthSys = transactionDateSys.getMonth() + 1;
+        const transactionYearSys = transactionDateSys.getFullYear();
+        const formattedDateSys = `${transactionDaySys.toString().padStart(2, '0')}/${transactionMonthSys
+          .toString()
+          .padStart(2, '0')}/${transactionYearSys}`;
+
+        return {
+          ...transactionDataSys,
+          id: doc.id,
+          formattedDateSys, // Add formatted date to the object
+        };
+      });
+
+      setSysTransactions(transactionListDataSys);
+    } catch (error) {
+      console.error('Error fetching system transactions:', error);
+    }
+  };
+
+
   useEffect(() => {
+    getSysTransactionsList();
     getTransactionsList();
   }, []);
+
   useEffect(() => {
-    handleQuantiteDifference();
-  }, [transactions]);
+    if (sysTransactions.length > 0) {
+      handleQuantiteDifference();
+    }
+  }, [transactions, sysTransactions]);
 
   const handleCompChange = (type) => {
     if (type === 'Nbr. Action') {
@@ -132,6 +178,37 @@ export default function DashboardAppPage() {
     // Combine the formatted integer part and the decimal part
     return `${formattedIntegerPart}${formattedDecimalPart} DH`;
   }
+
+  const calculatePnLByTitre = (sysTransactions) => {
+    return sysTransactions.reduce((acc, value) => {
+      const { titre, quantite, prixAchat, prixVente, taxValue = 0 } = value;
+
+      // Parse fields as numbers and handle missing fields
+      const parsedPrixAchat = parseFloat(prixAchat) || 0;
+      const parsedPrixVente = parseFloat(prixVente) || 0;
+      const parsedQuantite = parseFloat(quantite) || 0;
+      const parsedTaxValue = parseFloat(taxValue) || 0;
+
+      // Calculate the total purchase and sale amounts with tax for this transaction
+      const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
+      const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
+
+      // Calculate PnL for this transaction
+      const pnl = vente - achat;
+
+      // Initialize the PnL for this titre if it doesn't exist yet
+      if (!acc[titre]) {
+        acc[titre] = 0;
+      }
+
+      // Add the PnL for this transaction to the total PnL for the specific titre
+      acc[titre] += pnl;
+
+      return acc;
+    }, {});
+  };
+
+
   const handleQuantiteDifference = () => {
     // Group transactions by 'Titre'
     const groupedTransactions = transactions.reduce((acc, row) => {
@@ -162,11 +239,24 @@ export default function DashboardAppPage() {
       if (b.quantiteDifference === 0) return -1; // Push zero quantite values to the end
       return b.quantiteDifference - a.quantiteDifference; // Descending order for non-zero quantite
     });
+
+
     setStatsData(result);
-    console.log(result);
     return result;
   };
+  const pnlByTitre = calculatePnLByTitre(sysTransactions);
 
+  // Update your statsData with PnL and difference
+  const updatedStatsData = statsData.map(row => {
+    const pnl = pnlByTitre[row.id] || 0; // Fetch PnL from sysTransactions, default to 0 if not found
+    const pnlDifference = pnl - row.montantDifference; // Calculate the difference
+
+    return {
+      ...row,
+      totalPnl: pnl, // Add totalPnl column
+      pnlDifference, // Add the difference column
+    };
+  });
   return (
     <>
       <Helmet>
@@ -185,9 +275,9 @@ export default function DashboardAppPage() {
                 Resultats
               </Typography>
               <DataGrid
-                rows={statsData}
+                rows={updatedStatsData}
                 columns={[
-                  { field: 'id', headerName: 'Titre', width: 400 },
+                  { field: 'id', headerName: 'Titre', width: 260 },
                   {
                     field: 'montantDifference',
                     headerName: '+/- Value',
@@ -209,6 +299,26 @@ export default function DashboardAppPage() {
                         sx={{ textTransform: 'none' }}
                       >
                         {value}
+                      </Typography>
+                    ),
+                  },
+                  {
+                    field: 'totalPnl',
+                    headerName: 'Total Banque',
+                    width: 300,
+                    renderCell: ({ value }) => (
+                      <Typography variant="h6" color={value > 0 ? '#019875' : '#e8305f'} sx={{ textTransform: 'none' }}>
+                        {formatNumber(value)}
+                      </Typography>
+                    ),
+                  },
+                  {
+                    field: 'pnlDifference',
+                    headerName: 'Diff. (Banque - +/-Value)',
+                    width: 300,
+                    renderCell: ({ value }) => (
+                      <Typography variant="h6" color={value > 0 ? '#019875' : '#e8305f'} sx={{ textTransform: 'none' }}>
+                        {formatNumber(value)}
                       </Typography>
                     ),
                   },
