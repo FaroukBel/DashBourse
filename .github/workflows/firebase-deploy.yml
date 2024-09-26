@@ -1,10 +1,9 @@
 name: Deploy to Firebase Hosting
 
-# Trigger the workflow on every push to the repository
 on:
   push:
     branches:
-      - '*'  # This will trigger on every branch push. Modify if you want it only on specific branches.
+      - '*'  # Trigger on all branch pushes
 
 jobs:
   build:
@@ -22,8 +21,8 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Build React app
-      run: npm run build
+    - name: Build React app without CI=true
+      run: CI=false npm run build  # This will prevent warnings from being treated as errors
 
     - name: Deploy to Firebase Hosting
       run: firebase deploy --only hosting --token ${{ secrets.FIREBASE_TOKEN }}
