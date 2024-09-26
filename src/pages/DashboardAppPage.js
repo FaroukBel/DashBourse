@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import { faker } from '@faker-js/faker';
 // @mui
 import { useTheme } from '@mui/material/styles';
-import { Card, Grid, Button, Container, Typography } from '@mui/material';
+import { Card, Grid, Button, Container, Typography, Stack, TextField } from '@mui/material';
 import { collection, getDocs } from 'firebase/firestore';
 import { DataGrid } from '@mui/x-data-grid';
 import { useEffect, useState } from 'react';
@@ -178,37 +178,6 @@ export default function DashboardAppPage() {
     // Combine the formatted integer part and the decimal part
     return `${formattedIntegerPart}${formattedDecimalPart} DH`;
   }
-
-  const calculatePnLByTitre = (sysTransactions) => {
-    return sysTransactions.reduce((acc, value) => {
-      const { titre, quantite, prixAchat, prixVente, taxValue = 0 } = value;
-
-      // Parse fields as numbers and handle missing fields
-      const parsedPrixAchat = parseFloat(prixAchat) || 0;
-      const parsedPrixVente = parseFloat(prixVente) || 0;
-      const parsedQuantite = parseFloat(quantite) || 0;
-      const parsedTaxValue = parseFloat(taxValue) || 0;
-
-      // Calculate the total purchase and sale amounts with tax for this transaction
-      const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
-      const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
-
-      // Calculate PnL for this transaction
-      const pnl = vente - achat;
-
-      // Initialize the PnL for this titre if it doesn't exist yet
-      if (!acc[titre]) {
-        acc[titre] = 0;
-      }
-
-      // Add the PnL for this transaction to the total PnL for the specific titre
-      acc[titre] += pnl;
-
-      return acc;
-    }, {});
-  };
-
-
   const handleQuantiteDifference = () => {
     // Group transactions by 'Titre'
     const groupedTransactions = transactions.reduce((acc, row) => {
@@ -244,17 +213,69 @@ export default function DashboardAppPage() {
     setStatsData(result);
     return result;
   };
-  const pnlByTitre = calculatePnLByTitre(sysTransactions);
+  const calculatePnLByTitre = (sysTransactions) => {
+    return sysTransactions.reduce(
+      (acc, value) => {
+        const { titre, quantite, prixAchat, prixVente, taxValue = 0 } = value;
 
-  // Update your statsData with PnL and difference
+        // Parse fields as numbers and handle missing fields
+        const parsedPrixAchat = parseFloat(prixAchat) || 0;
+        const parsedPrixVente = parseFloat(prixVente) || 0;
+        const parsedQuantite = parseFloat(quantite) || 0;
+        const parsedTaxValue = parseFloat(taxValue) || 0;
+
+        // Calculate the total purchase and sale amounts with tax for this transaction
+        const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
+        const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
+
+        // Calculate PnL for this transaction
+        let pnl = vente - achat;
+        let taxAmount = 0;
+
+        // If the PnL is positive, apply a 15% tax
+        if (pnl > 0) {
+          taxAmount = pnl * 0.15; // Store the tax amount (15% of pnl)
+          pnl *= 0.85; // Deduct 15% tax
+        }
+
+        // Initialize the PnL, totalTax, and totalTaxValue for this titre if they don't exist yet
+        if (!acc.pnl[titre]) {
+          acc.pnl[titre] = 0;
+        }
+        if (!acc.totalTax[titre]) {
+          acc.totalTax[titre] = 0;
+        }
+        if (!acc.totalTaxValue[titre]) {
+          acc.totalTaxValue[titre] = 0;
+        }
+
+        // Add the PnL for this transaction to the total PnL for the specific titre
+        acc.pnl[titre] += pnl;
+        acc.totalTax[titre] += taxAmount; // Add the tax amount to the total tax for the specific titre
+        acc.totalTaxValue[titre] += parsedTaxValue * parsedQuantite; // Add the parsedTaxValue to the total tax value for the titre
+
+        return acc;
+      },
+      { pnl: {}, totalTax: {}, totalTaxValue: {} } // Initialize accumulator with both PnL, total tax, and tax value objects
+    );
+  };
+
+  // Calculate PnL, total tax, and total tax value by titre
+  const { pnl: pnlByTitre, totalTax: totalTaxByTitre, totalTaxValue: totalTaxValueByTitre } = calculatePnLByTitre(sysTransactions);
+
+  // Update your statsData with PnL, difference, tax, and total tax value
   const updatedStatsData = statsData.map(row => {
     const pnl = pnlByTitre[row.id] || 0; // Fetch PnL from sysTransactions, default to 0 if not found
+    const totalTax = totalTaxByTitre[row.id] || 0; // Fetch total tax from sysTransactions, default to 0 if not found
+    const totalTaxValue = totalTaxValueByTitre[row.id] || 0; // Fetch total tax value from sysTransactions, default to 0 if not found
     const pnlDifference = pnl - row.montantDifference; // Calculate the difference
 
     return {
       ...row,
       totalPnl: pnl, // Add totalPnl column
       pnlDifference, // Add the difference column
+      totalTax, // Add the total tax column
+      totalTaxValue, // Add the total tax value column
     };
   });
   return (
@@ -295,29 +316,60 @@ export default function DashboardAppPage() {
                     renderCell: ({ value }) => (
                       <Typography
                         variant="h6"
-                        color={value > 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'}
+                        color={value < 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'}
                         sx={{ textTransform: 'none' }}
                       >
-                        {value}
+                        {-value}
                       </Typography>
                     ),
                   },
                   {
                     field: 'totalPnl',
-                    headerName: 'Total Banque',
+                    headerName: 'Total Systeme',
                     width: 300,
                     renderCell: ({ value }) => (
-                      <Typography variant="h6" color={value > 0 ? '#019875' : '#e8305f'} sx={{ textTransform: 'none' }}>
+                      <Typography variant="h6" color={value > 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'} sx={{ textTransform: 'none' }}>
                         {formatNumber(value)}
                       </Typography>
                     ),
                   },
                   {
                     field: 'pnlDifference',
-                    headerName: 'Diff. (Banque - +/-Value)',
+                    headerName: 'Diff. (Systeme - Banque)',
                     width: 300,
                     renderCell: ({ value }) => (
-                      <Typography variant="h6" color={value > 0 ? '#019875' : '#e8305f'} sx={{ textTransform: 'none' }}>
+                      <Typography
+                        variant="h6"
+                        color={
+                          value > 1
+                            ? '#019875' // Green if value > 1
+                            : value >= -1 && value <= 1
+                              ? 'black' // Black if value is between 0 and 1 (inclusive)
+                              : '#e8305f' // Red if value < 0
+                        }
+                        sx={{ textTransform: 'none' }}
+                      >                        {formatNumber(value)}
+                      </Typography>
+                    ),
+                  },
+                  {
+                    field: 'totalTax',
+                    headerName: 'Total IGR',
+                    width: 300,
+                    renderCell: ({ value }) => (
+                      <Typography variant="h6" color={'black'} sx={{ textTransform: 'none' }}>
+
+
+                        {formatNumber(value)}
+                      </Typography>
+                    ),
+                  },
+                  {
+                    field: 'totalTaxValue',
+                    headerName: 'Total IGR Value',
+                    width: 300,
+                    renderCell: ({ value }) => (
+                      <Typography variant="h6" color={'black'} sx={{ textTransform: 'none' }}>
                         {formatNumber(value)}
                       </Typography>
                     ),
@@ -339,6 +391,47 @@ export default function DashboardAppPage() {
                   },
                 }}
               />
+              <Stack direction="row" spacing={2} sx={{ mt: 5 }}>
+                <Stack direction="column" sx={{ mt: 5 }}>
+                  <Typography variant="h6">Total Difference Qte</Typography>
+                  <TextField
+
+                    value={-updatedStatsData.reduce((acc, value) => acc + value.quantiteDifference, 0)}
+                    InputProps={{
+                      readOnly: true,
+                      sx: { color: '#019875' }, // Custom text color
+                    }}
+                    variant="outlined"
+                    sx={{ width: 200 }} // Adjust width as necessary
+                  />
+                </Stack>
+
+                <Stack direction="column" sx={{ mt: 5 }}>
+                  <Typography variant="h6">Total IGR</Typography>
+                  <TextField
+                    value={formatNumber(Object.values(totalTaxByTitre).reduce((acc, value) => acc + value, 0))}
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                    variant="outlined"
+                    sx={{ width: 200 }} // Adjust width as necessary
+                  />
+                </Stack>
+
+
+                <Stack direction="column" sx={{ mt: 5 }}>
+                  <Typography variant="h6">Total IGR Value</Typography>
+                  <TextField
+                    value={formatNumber(Object.values(totalTaxValueByTitre).reduce((acc, value) => acc + value, 0))}
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                    variant="outlined"
+                    sx={{ width: 200 }} // Adjust width as necessary
+                  />
+                </Stack>
+
+              </Stack>
             </Card>
           </Grid>
 
