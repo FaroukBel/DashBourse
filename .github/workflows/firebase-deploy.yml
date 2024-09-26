@@ -13,7 +13,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    # Cache node_modules to speed up npm install
+    # Cache node modules to speed up npm install
     - name: Cache node modules
       uses: actions/cache@v2
       with:
@@ -29,6 +29,10 @@ jobs:
 
     - name: Install dependencies
       run: npm install
+
+    # Install Firebase CLI
+    - name: Install Firebase CLI
+      run: npm install -g firebase-tools
 
     - name: Build React app without CI=true
       run: CI=false npm run build  # This will prevent warnings from being treated as errors
