@@ -2,11 +2,27 @@ import { Helmet } from 'react-helmet-async';
 import { faker } from '@faker-js/faker';
 // @mui
 import { useTheme } from '@mui/material/styles';
-import { Card, Grid, Button, Container, Typography, Stack, TextField } from '@mui/material';
+import { Card, Grid, Button, Container, Typography, Stack, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import { collection, getDocs } from 'firebase/firestore';
 import { DataGrid } from '@mui/x-data-grid';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 // components
+import { LineChart } from '@mui/x-charts';
+import { Bar, Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+} from 'chart.js';
+
+// Register the required components
+import zoomPlugin from 'chartjs-plugin-zoom';
 
 import Iconify from '../components/iconify';
 // sections
@@ -22,7 +38,18 @@ import {
 } from '../sections/@dashboard/app';
 import { db } from '../config/firebase-config';
 
-// ----------------------------------------------------------------------
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  BarElement,
+
+  Legend,
+  zoomPlugin
+);
 
 export default function DashboardAppPage() {
   const theme = useTheme();
@@ -33,6 +60,7 @@ export default function DashboardAppPage() {
   const [statsData, setStatsData] = useState([]);
   const listTransactionRef = collection(db, 'bank_transactions');
   const listTransactionRefSys = collection(db, 'Transactions');
+  const [chartType, setChartType] = useState("line")
   const [groupByTitre, setGroupByTitre] = useState([]);
 
   const getTransactionsList = async () => {
@@ -128,7 +156,7 @@ export default function DashboardAppPage() {
           formattedDateSys, // Add formatted date to the object
         };
       });
-
+      console.log(transactionListDataSys)
       setSysTransactions(transactionListDataSys);
     } catch (error) {
       console.error('Error fetching system transactions:', error);
@@ -278,6 +306,166 @@ export default function DashboardAppPage() {
       totalTaxValue, // Add the total tax value column
     };
   });
+
+
+
+
+  const calculatePnLByDate = (sysTransactions) => {
+    return sysTransactions.reduce((acc, value) => {
+      const { date, quantite, prixAchat, prixVente, taxValue = 0 } = value;
+
+      if (!date || typeof date.seconds !== 'number') {
+        // Skip this entry if 'date' is missing or not in the expected format
+        return acc;
+      }
+
+      const parsedPrixAchat = parseFloat(prixAchat) || 0;
+      const parsedPrixVente = parseFloat(prixVente) || 0;
+      const parsedQuantite = parseFloat(quantite) || 0;
+      const parsedTaxValue = parseFloat(taxValue) || 0;
+
+      const formattedDate = new Date(date.seconds * 1000).toLocaleDateString();
+
+      const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
+      const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
+      let pnl = vente - achat;
+      let taxAmount = 0;
+
+      if (pnl > 0) {
+        taxAmount = pnl * 0.15;
+        pnl *= 0.85;
+      }
+
+      if (!acc[formattedDate]) {
+        acc[formattedDate] = { pnl: 0, totalTax: 0 };
+      }
+
+      acc[formattedDate].pnl += pnl;
+      acc[formattedDate].totalTax += taxAmount;
+
+      return acc;
+    }, {});
+  };
+
+  // Example Usage
+  const getDateKey = (date, filterType) => {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const week = Math.ceil(d.getDate() / 7);
+
+    switch (filterType) {
+      case 'semaine':
+        return `${year}-S${week}`;
+      case 'mois':
+        return `${year}-${String(month).padStart(2, '0')}`;
+      case 'trimestre':
+        return `${year}-T${Math.ceil(month / 3)}`;
+      case 'anne':
+        return `${year}`;
+      default:
+        return d.toLocaleDateString(); // jour
+    }
+  };
+
+  // Aggregate PnL based on the selected filter type
+  const aggregatePnL = (pnlByDate, filterType) => {
+    return Object.entries(pnlByDate).reduce((acc, [date, { pnl, totalTax }]) => {
+      const key = getDateKey(date, filterType);
+
+      if (!acc[key]) {
+        acc[key] = { pnl: 0, totalTax: 0 };
+      }
+
+      acc[key].pnl += pnl;
+      acc[key].totalTax += totalTax;
+
+      return acc;
+    }, {});
+  };
+
+  // Example usage
+  const [filterType, setFilterType] = useState('jour');
+  const pnlByDate = calculatePnLByDate(sysTransactions);
+
+  // Recalculate filtered PnL data when filterType changes
+  const filteredPnL = useMemo(() => aggregatePnL(pnlByDate, filterType), [pnlByDate, filterType]);
+  const getDateForSorting = (dateString, filterType) => {
+    if (filterType === 'semaine') {
+      // Parse 'YYYY-WW' to an approximate date (first day of the week)
+      const [year, week] = dateString.split('-S');
+      const startDate = new Date(year, 0, 1); // Start of the year
+      const daysOffset = (parseInt(week, 10) - 1) * 7; // Added radix 10
+      return new Date(startDate.setDate(startDate.getDate() + daysOffset));
+    }
+    if (filterType === 'trimestre') {
+      // Parse 'YYYY-Q#' to an approximate date (first day of the quarter)
+      const [year, quarter] = dateString.split('-T');
+      const month = (parseInt(quarter, 10) - 1) * 3; // Added radix 10
+      return new Date(year, month, 1); // First day of the quarter
+    }
+    return new Date(dateString); // For 'jour', 'mois', or 'anne'
+  };
+
+  const chartData = useMemo(() => {
+    const sortedDates = Object.keys(filteredPnL).sort((a, b) =>
+      getDateForSorting(a, filterType) - getDateForSorting(b, filterType)
+    );
+
+    return {
+      labels: sortedDates,
+      datasets: [
+        {
+          label: `PnL - ${filterType.charAt(0).toUpperCase() + filterType.slice(1)}`,
+          data: sortedDates.map(date => filteredPnL[date].pnl),
+          borderColor: 'rgba(75, 192, 192, 1)',
+          borderWidth: 2,
+          fill: false,
+        },
+      ],
+    };
+  }, [filteredPnL, filterType]);
+
+  const handleFilterChange = (event) => {
+    setFilterType(event.target.value);
+  };
+  const options = {
+    scales: {
+      x: { title: { display: true, text: 'Période' } },
+      y: { title: { display: true, text: 'PnL' } },
+    },
+    plugins: {
+      zoom: {
+        zoom: {
+          wheel: {
+            enabled: true, // Enable zooming with the mouse wheel
+          },
+          pinch: {
+            enabled: true, // Enable zooming with pinch on touch devices
+          },
+          mode: 'x', // Zoom along the x-axis
+        },
+        pan: {
+          enabled: true, // Enable panning
+          mode: 'x', // Pan along the x-axis
+        },
+      },
+    },
+  };
+
+
+  const groupedPnLData = aggregatePnL(pnlByDate, 'monthly'); // Change to 'quarterly' or 'yearly' as needed
+
+  const barChartData = {
+    labels: Object.keys(groupedPnLData),
+    datasets: [
+      {
+        label: 'PnL',
+        data: Object.values(groupedPnLData).map(item => item.pnl),
+        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+      },
+    ],
+  };
   return (
     <>
       <Helmet>
@@ -286,6 +474,90 @@ export default function DashboardAppPage() {
 
       <Container maxWidth="xl">
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Card
+              style={{
+                padding: '20px',
+              }}
+            >
+              <Stack direction={"row"} spacing={2}>
+
+
+                <FormControl fullWidth variant="outlined" style={{ marginBottom: '1rem' }}>
+                  <InputLabel id="time-period-select-label">Période</InputLabel>
+                  <Select
+                    labelId="time-period-select-label"
+                    id="time-period-select"
+                    value={filterType}
+                    onChange={handleFilterChange}
+                    label="Time Period"
+                  >
+                    <MenuItem value="jour">Jour</MenuItem>
+                    <MenuItem value="semaine">Semaine</MenuItem>
+                    <MenuItem value="mois">Mois</MenuItem>
+                    <MenuItem value="trimestre">Trimestre</MenuItem>
+                    <MenuItem value="anne">Anne</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth variant="outlined" style={{ marginBottom: '1rem' }}>
+                  <InputLabel id="time-period-select-label">Type</InputLabel>
+                  <Select
+                    labelId="time-period-select-label"
+                    id="time-period-select"
+                    value={chartType}
+                    onChange={(e) => {
+                      setChartType(e.target.value)
+                    }}
+                    label="Time Period"
+                  >
+                    <MenuItem value="line">Line</MenuItem>
+                    <MenuItem value="bar">Bar</MenuItem>
+
+                  </Select>
+                </FormControl>
+              </Stack>
+              {
+                chartType === "line" ? (
+
+                  <Line data={chartData} options={options} />
+                ) : (
+
+                  <Bar
+                    data={barChartData}
+                    options={{
+                      scales: {
+                        x: { title: { display: true, text: 'Periode' } },
+                        y: { title: { display: true, text: 'PnL' } },
+                      },
+                      plugins: {
+                        legend: { display: true },
+                        zoom: {
+                          zoom: {
+                            wheel: {
+                              enabled: true,
+                            },
+                            pinch: {
+                              enabled: true,
+                            },
+                            mode: 'x',
+                          },
+                          pan: {
+                            enabled: true,
+                            mode: 'x',
+                          },
+
+                        }
+
+                      }
+                    }}
+                  />
+                )
+              }
+
+            </Card>
+
+          </Grid>
           <Grid item xs={12}>
             <Card
               style={{
@@ -434,6 +706,7 @@ export default function DashboardAppPage() {
               </Stack>
             </Card>
           </Grid>
+
 
           <Grid item xs={12} md={6} lg={8}>
             <AppConversionRates
