@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import { faker } from '@faker-js/faker';
 // @mui
 import { useTheme } from '@mui/material/styles';
-import { Card, Grid, Button, Container, Typography, Stack, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Card, Grid, Button, Container, Typography, Stack, TextField, FormControl, InputLabel, Select, MenuItem, Box } from '@mui/material';
 import { collection, getDocs } from 'firebase/firestore';
 import { DataGrid } from '@mui/x-data-grid';
 import { useEffect, useMemo, useState } from 'react';
@@ -23,8 +23,11 @@ import {
 
 // Register the required components
 import zoomPlugin from 'chartjs-plugin-zoom';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import dayjs from 'dayjs';
 
-import Iconify from '../components/iconify';
 // sections
 import {
   AppTasks,
@@ -36,6 +39,7 @@ import {
   AppCurrentSubject,
   AppConversionRates,
 } from '../sections/@dashboard/app';
+import Iconify from '../components/iconify';
 import { db } from '../config/firebase-config';
 
 ChartJS.register(
@@ -385,11 +389,28 @@ export default function DashboardAppPage() {
   };
 
   // Example usage
-  const [filterType, setFilterType] = useState('jour');
+  const [filterType, setFilterType] = useState('mois');
   const pnlByDate = calculatePnLByDate(sysTransactions);
-
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(dayjs(new Date()));
   // Recalculate filtered PnL data when filterType changes
-  const filteredPnL = useMemo(() => aggregatePnL(pnlByDate, filterType), [pnlByDate, filterType]);
+  const filteredPnL = useMemo(() => {
+    let data = aggregatePnL(pnlByDate, filterType);
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      data = Object.fromEntries(
+        Object.entries(data).filter(([dateKey]) => {
+          const date = new Date(dateKey);
+          return date >= start && date <= end;
+        })
+      );
+    }
+
+    return data;
+  }, [pnlByDate, filterType, startDate, endDate]);
   const getDateForSorting = (dateString, filterType) => {
     if (filterType === 'semaine') {
       // Parse 'YYYY-WW' to an approximate date (first day of the week)
@@ -434,23 +455,7 @@ export default function DashboardAppPage() {
       x: { title: { display: true, text: 'Période' } },
       y: { title: { display: true, text: 'PnL' } },
     },
-    plugins: {
-      zoom: {
-        zoom: {
-          wheel: {
-            enabled: true, // Enable zooming with the mouse wheel
-          },
-          pinch: {
-            enabled: true, // Enable zooming with pinch on touch devices
-          },
-          mode: 'x', // Zoom along the x-axis
-        },
-        pan: {
-          enabled: true, // Enable panning
-          mode: 'x', // Pan along the x-axis
-        },
-      },
-    },
+
   };
 
 
@@ -466,6 +471,31 @@ export default function DashboardAppPage() {
       },
     ],
   };
+  const rows = useMemo(() => Object.keys(filteredPnL).map((dateKey, index) => ({
+    id: index,
+    date: dateKey,
+    pnl: filteredPnL[dateKey].pnl,
+    totalTax: filteredPnL[dateKey].totalTax,
+  })), [filteredPnL]);
+
+  const columns = [
+    { field: 'date', headerName: 'Date', width: 150 },
+    {
+      field: 'pnl', headerName: '+/-Value', width: 200,
+
+      renderCell: ({ value }) => (
+        <Typography
+          variant="h6"
+          color={value > 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'}
+          sx={{ textTransform: 'none' }}
+        >
+          {formatNumber(value)}
+        </Typography>
+      ),
+
+    },
+    // { field: 'totalTax', headerName: 'Total Tax', width: 150 },
+  ];
   return (
     <>
       <Helmet>
@@ -493,67 +523,78 @@ export default function DashboardAppPage() {
                     label="Time Period"
                   >
                     <MenuItem value="jour">Jour</MenuItem>
-                    <MenuItem value="semaine">Semaine</MenuItem>
+                    {/* <MenuItem value="semaine">Semaine</MenuItem> */}
                     <MenuItem value="mois">Mois</MenuItem>
-                    <MenuItem value="trimestre">Trimestre</MenuItem>
+                    {/* <MenuItem value="trimestre">Trimestre</MenuItem> */}
                     <MenuItem value="anne">Anne</MenuItem>
                   </Select>
                 </FormControl>
 
-                <FormControl fullWidth variant="outlined" style={{ marginBottom: '1rem' }}>
-                  <InputLabel id="time-period-select-label">Type</InputLabel>
-                  <Select
-                    labelId="time-period-select-label"
-                    id="time-period-select"
-                    value={chartType}
-                    onChange={(e) => {
-                      setChartType(e.target.value)
-                    }}
-                    label="Time Period"
-                  >
-                    <MenuItem value="line">Line</MenuItem>
-                    <MenuItem value="bar">Bar</MenuItem>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Box sx={{ display: 'flex', gap: 2, marginBottom: 2 }}>
+                    <DatePicker
+                      label="Start Date"
+                      value={startDate}
+                      onChange={(newValue) => setStartDate(newValue)}
+                      maxDate={endDate} // Start date cannot exceed end date
+                      renderInput={(params) => <TextField {...params} fullWidth />}
+                    />
+                    <DatePicker
+                      label="End Date"
+                      value={endDate}
+                      onChange={(newValue) => setEndDate(newValue)}
+                      minDate={startDate} // End date cannot be before start date
+                      maxDate={dayjs(new Date())} // End date cannot exceed today's date
+                      renderInput={(params) => <TextField {...params} fullWidth />}
+                    />
+                  </Box>
+                </LocalizationProvider>
 
-                  </Select>
-                </FormControl>
               </Stack>
-              {
-                chartType === "line" ? (
+              <Stack direction={"row"}>
+                <Box >
 
-                  <Line data={chartData} options={options} />
-                ) : (
 
-                  <Bar
-                    data={barChartData}
-                    options={{
-                      scales: {
-                        x: { title: { display: true, text: 'Periode' } },
-                        y: { title: { display: true, text: 'PnL' } },
-                      },
-                      plugins: {
-                        legend: { display: true },
-                        zoom: {
-                          zoom: {
-                            wheel: {
-                              enabled: true,
-                            },
-                            pinch: {
-                              enabled: true,
-                            },
-                            mode: 'x',
-                          },
-                          pan: {
-                            enabled: true,
-                            mode: 'x',
-                          },
+                  <DataGrid
+                    rows={rows}
+                    columns={columns}
+                    pageSize={10}
+                    sx={{ height: "500px" }}
+                    rowsPerPageOptions={[10, 20, 50]}
 
-                        }
-
-                      }
-                    }}
                   />
-                )
-              }
+                </Box>
+                <Box
+                  style={{
+                    width: '100%',
+                    height: '500px',
+                  }}
+                >
+
+                  {
+                    chartType === "line" ? (
+
+                      <Line data={chartData} options={options} />
+                    ) : (
+
+                      <Bar
+                        data={barChartData}
+                        options={{
+                          scales: {
+                            x: { title: { display: true, text: 'Periode' } },
+                            y: { title: { display: true, text: 'PnL' } },
+                          },
+                          plugins: {
+                            legend: { display: true },
+
+
+                          }
+                        }}
+                      />
+                    )
+                  }
+                </Box>
+              </Stack>
 
             </Card>
 
