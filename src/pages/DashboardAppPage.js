@@ -471,12 +471,17 @@ export default function DashboardAppPage() {
       },
     ],
   };
-  const rows = useMemo(() => Object.keys(filteredPnL).map((dateKey, index) => ({
-    id: index,
-    date: dateKey,
-    pnl: filteredPnL[dateKey].pnl,
-    totalTax: filteredPnL[dateKey].totalTax,
-  })), [filteredPnL]);
+  const rows = useMemo(() =>
+    Object.keys(filteredPnL).map((dateKey, index) => {
+      console.log(dateKey); // This will log dateKey
+      return {
+        id: index,
+        date: dateKey,
+        pnl: filteredPnL[dateKey].pnl,
+        totalTax: filteredPnL[dateKey].totalTax,
+      };
+    }), [filteredPnL]);
+
 
   const columns = [
     { field: 'date', headerName: 'Date', width: 150 },
@@ -496,6 +501,8 @@ export default function DashboardAppPage() {
     },
     // { field: 'totalTax', headerName: 'Total Tax', width: 150 },
   ];
+
+  console.log(rows)
   return (
     <>
       <Helmet>
