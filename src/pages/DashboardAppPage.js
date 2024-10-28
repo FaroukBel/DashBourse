@@ -318,18 +318,26 @@ export default function DashboardAppPage() {
     return sysTransactions.reduce((acc, value) => {
       const { date, quantite, prixAchat, prixVente, taxValue = 0 } = value;
 
+      // Date check: ensure date exists and is in the expected format
       if (!date || typeof date.seconds !== 'number') {
-        // Skip this entry if 'date' is missing or not in the expected format
+        console.warn('Invalid date format or missing date:', date);
         return acc;
       }
 
-      const parsedPrixAchat = parseFloat(prixAchat) || 0;
-      const parsedPrixVente = parseFloat(prixVente) || 0;
-      const parsedQuantite = parseFloat(quantite) || 0;
-      const parsedTaxValue = parseFloat(taxValue) || 0;
+      // Parsing numeric fields with fallback to 0 for NaN cases
+      const parsedPrixAchat = Number.isNaN(parseFloat(prixAchat)) ? 0 : parseFloat(prixAchat);
+      const parsedPrixVente = Number.isNaN(parseFloat(prixVente)) ? 0 : parseFloat(prixVente);
+      const parsedQuantite = Number.isNaN(parseFloat(quantite)) ? 0 : parseFloat(quantite);
+      const parsedTaxValue = Number.isNaN(parseFloat(taxValue)) ? 0 : parseFloat(taxValue);
 
+      // Format date and check for any unexpected results
       const formattedDate = new Date(date.seconds * 1000).toLocaleDateString();
+      if (!formattedDate) {
+        console.warn('Formatted date is invalid:', date.seconds);
+        return acc;
+      }
 
+      // Calculate PnL and tax amount with additional error handling
       const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
       const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
       let pnl = vente - achat;
@@ -350,6 +358,7 @@ export default function DashboardAppPage() {
       return acc;
     }, {});
   };
+
 
   // Example Usage
   const getDateKey = (date, filterType) => {
