@@ -20,6 +20,7 @@ import {
   Legend,
   BarElement,
 } from 'chart.js';
+import 'dayjs/locale/fr';
 
 // Register the required components
 import zoomPlugin from 'chartjs-plugin-zoom';
@@ -333,8 +334,7 @@ export default function DashboardAppPage() {
         console.warn('Invalid or missing date:', date);
         return acc;
       }
-      const formattedDate = formatDateWithoutLeadingZeros(parsedDate);
-  
+
       // Parsing numeric fields with fallback to 0 for NaN cases
       const parsedPrixAchat = parseFloat(prixAchat) || 0;
       const parsedPrixVente = parseFloat(prixVente) || 0;
@@ -448,7 +448,21 @@ export default function DashboardAppPage() {
 
       data = Object.fromEntries(
         Object.entries(data).filter(([dateKey]) => {
-          const date = new Date(dateKey);
+          let date;
+
+          if (filterType === 'jour') {
+            // Format: "DD/MM/YYYY"
+            const [day, month, year] = dateKey.split('/').map(Number);
+            date = new Date(year, month - 1, day);
+          } else if (filterType === 'mois') {
+            // Format: "YYYY-M"
+            const [year, month] = dateKey.split('-').map(Number);
+            date = new Date(year, month - 1, 1); // Set to first day of the month
+          } else if (filterType === 'anne') {
+            // Format: "YYYY"
+            date = new Date(dateKey, 0, 1); // Set to January 1st of the year
+          }
+
           return date >= start && date <= end;
         })
       );
@@ -501,22 +515,76 @@ export default function DashboardAppPage() {
       },
     ],
   };
-  const rows = useMemo(() =>
-    Object.keys(filteredPnL).map((dateKey, index) => {
+  const rows = useMemo(() => {
+    return Object.keys(filteredPnL).map((dateKey, index) => {
+      let formattedDate;
+      let dateObj;
+
+      if (filterType === 'jour') {
+        // Format DD/MM/YYYY for daily
+        const [day, month, year] = dateKey.split('/').map(Number);
+        dateObj = new Date(year, month - 1, day);
+        formattedDate = dayjs(dateObj).locale('fr').format('DD/MM/YYYY');
+      } else if (filterType === 'mois') {
+        // Format MM/YYYY for monthly
+        const [year, month] = dateKey.split('-').map(Number);
+        dateObj = new Date(year, month - 1, 1);
+        formattedDate = dayjs(dateObj).locale('fr').format('MM/YYYY');
+      } else if (filterType === 'anne') {
+        // Format YYYY for yearly
+        dateObj = new Date(dateKey, 0, 1); // Set to Jan 1st of the year
+        formattedDate = dayjs(dateObj).locale('fr').format('YYYY');
+      }
+
       return {
         id: index,
-        date: dateKey,
+        date: formattedDate, // Displayed date string in French format
+        dateObj, // Date object for sorting
         pnl: filteredPnL[dateKey].pnl,
         totalTax: filteredPnL[dateKey].totalTax,
       };
-    }), [filteredPnL]);
+    });
+  }, [filteredPnL, filterType]);
 
 
+  const getDateComparator = (filterType) => (v1, v2) => {
+    if (filterType === 'jour') {
+      // Daily format: "DD/MM/YYYY"
+      const [day1, month1, year1] = v1.split('/').map(Number);
+      const [day2, month2, year2] = v2.split('/').map(Number);
+      const date1 = new Date(year1, month1 - 1, day1);
+      const date2 = new Date(year2, month2 - 1, day2);
+      return date1 - date2;
+    }
+
+    if (filterType === 'mois') {
+      // Monthly format: "MM/YYYY"
+      const [month1, year1] = v1.split('/').map(Number);
+      const [month2, year2] = v2.split('/').map(Number);
+      return year1 !== year2 ? year1 - year2 : month1 - month2;
+    }
+
+    if (filterType === 'anne') {
+      // Yearly format: "YYYY"
+      return parseInt(v1, 10) - parseInt(v2, 10);
+    }
+
+    return 0;
+  };
+
+
+  // DataGrid columns with date sorting
   const columns = [
-    { field: 'date', headerName: 'Date', width: 150 },
     {
-      field: 'pnl', headerName: '+/-Value', width: 200,
-
+      field: 'date',
+      headerName: 'Date',
+      width: 150,
+      sortComparator: getDateComparator(filterType), // Pass the current filterType
+    },
+    {
+      field: 'pnl',
+      headerName: '+/-Value',
+      width: 200,
       renderCell: ({ value }) => (
         <Typography
           variant="h6"
@@ -526,10 +594,9 @@ export default function DashboardAppPage() {
           {formatNumber(value)}
         </Typography>
       ),
-
     },
-    // { field: 'totalTax', headerName: 'Total Tax', width: 150 },
   ];
+
 
   return (
     <>
@@ -565,24 +632,24 @@ export default function DashboardAppPage() {
                   </Select>
                 </FormControl>
 
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Box sx={{ display: 'flex', gap: 2, marginBottom: 2 }}>
-                    <DatePicker
-                      label="Start Date"
-                      value={startDate}
-                      onChange={(newValue) => setStartDate(newValue)}
-                      maxDate={endDate} // Start date cannot exceed end date
-                      renderInput={(params) => <TextField {...params} fullWidth />}
-                    />
-                    <DatePicker
-                      label="End Date"
-                      value={endDate}
-                      onChange={(newValue) => setEndDate(newValue)}
-                      minDate={startDate} // End date cannot be before start date
-                      maxDate={dayjs(new Date())} // End date cannot exceed today's date
-                      renderInput={(params) => <TextField {...params} fullWidth />}
-                    />
-                  </Box>
+                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="fr">
+                  <DatePicker
+                    label="Date de debut"
+                    value={startDate}
+                    onChange={(newValue) => setStartDate(newValue)}
+                    maxDate={endDate} // Start date cannot exceed end date
+                    inputFormat="DD/MM/YYYY" // Set format to dd/mm/yyyy
+                    renderInput={(params) => <TextField {...params} fullWidth />}
+                  />
+                  <DatePicker
+                    label="Date de fin"
+                    value={endDate}
+                    onChange={(newValue) => setEndDate(newValue)}
+                    minDate={startDate} // End date cannot be before start date
+                    maxDate={dayjs(new Date())} // End date cannot exceed today's date
+                    inputFormat="DD/MM/YYYY" // Set format to dd/mm/yyyy
+                    renderInput={(params) => <TextField {...params} fullWidth />}
+                  />
                 </LocalizationProvider>
 
               </Stack>
