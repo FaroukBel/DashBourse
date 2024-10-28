@@ -27,6 +27,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
+import { format, isValid } from 'date-fns';
 
 // sections
 import {
@@ -160,7 +161,6 @@ export default function DashboardAppPage() {
           formattedDateSys, // Add formatted date to the object
         };
       });
-      console.log(transactionListDataSys)
       setSysTransactions(transactionListDataSys);
     } catch (error) {
       console.error('Error fetching system transactions:', error);
@@ -314,30 +314,34 @@ export default function DashboardAppPage() {
 
 
 
+  const formatDateWithoutLeadingZeros = (date) => {
+    const day = date.getDate(); // No leading zero
+    const month = date.getMonth() + 1; // Months are zero-indexed
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   const calculatePnLByDate = (sysTransactions) => {
     return sysTransactions.reduce((acc, value) => {
       const { date, quantite, prixAchat, prixVente, taxValue = 0 } = value;
 
-      // Date check: ensure date exists and is in the expected format
-      if (!date || typeof date.seconds !== 'number') {
-        console.warn('Invalid date format or missing date:', date);
+      // Ensure date exists and convert to a Date object
+      const dateInMilliseconds = date?.seconds ? date.seconds * 1000 : null;
+      const parsedDate = dateInMilliseconds ? new Date(dateInMilliseconds) : null;
+
+      if (!parsedDate || Number.isNaN(parsedDate)) {
+        console.warn('Invalid or missing date:', date);
         return acc;
       }
-
+      const formattedDate = formatDateWithoutLeadingZeros(parsedDate);
+  
       // Parsing numeric fields with fallback to 0 for NaN cases
-      const parsedPrixAchat = Number.isNaN(parseFloat(prixAchat)) ? 0 : parseFloat(prixAchat);
-      const parsedPrixVente = Number.isNaN(parseFloat(prixVente)) ? 0 : parseFloat(prixVente);
-      const parsedQuantite = Number.isNaN(parseFloat(quantite)) ? 0 : parseFloat(quantite);
-      const parsedTaxValue = Number.isNaN(parseFloat(taxValue)) ? 0 : parseFloat(taxValue);
+      const parsedPrixAchat = parseFloat(prixAchat) || 0;
+      const parsedPrixVente = parseFloat(prixVente) || 0;
+      const parsedQuantite = parseFloat(quantite) || 0;
+      const parsedTaxValue = parseFloat(taxValue) || 0;
 
-      // Format date and check for any unexpected results
-      const formattedDate = new Date(date.seconds * 1000).toLocaleDateString();
-      if (!formattedDate) {
-        console.warn('Formatted date is invalid:', date.seconds);
-        return acc;
-      }
-
-      // Calculate PnL and tax amount with additional error handling
+      // PnL calculation logic
       const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
       const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
       let pnl = vente - achat;
@@ -348,12 +352,12 @@ export default function DashboardAppPage() {
         pnl *= 0.85;
       }
 
-      if (!acc[formattedDate]) {
-        acc[formattedDate] = { pnl: 0, totalTax: 0 };
+      if (!acc[parsedDate]) {
+        acc[parsedDate] = { pnl: 0, totalTax: 0 };
       }
 
-      acc[formattedDate].pnl += pnl;
-      acc[formattedDate].totalTax += taxAmount;
+      acc[parsedDate].pnl += pnl;
+      acc[parsedDate].totalTax += taxAmount;
 
       return acc;
     }, {});
@@ -365,36 +369,68 @@ export default function DashboardAppPage() {
     const d = new Date(date);
     const year = d.getFullYear();
     const month = d.getMonth() + 1;
-    const week = Math.ceil(d.getDate() / 7);
+    const day = d.getDate();
+    const week = Math.ceil(day / 7);
 
     switch (filterType) {
       case 'semaine':
         return `${year}-S${week}`;
       case 'mois':
-        return `${year}-${String(month).padStart(2, '0')}`;
+        return `${year}-${month}`; // Month as `year-month` without padding
       case 'trimestre':
         return `${year}-T${Math.ceil(month / 3)}`;
       case 'anne':
         return `${year}`;
       default:
-        return d.toLocaleDateString(); // jour
+        return `${day}/${month}/${year}`; // Use consistent `DD/MM/YYYY` format for 'jour'
     }
   };
 
-  // Aggregate PnL based on the selected filter type
   const aggregatePnL = (pnlByDate, filterType) => {
     return Object.entries(pnlByDate).reduce((acc, [date, { pnl, totalTax }]) => {
       const key = getDateKey(date, filterType);
 
+      // Initialize the accumulation object for the current key if not present
       if (!acc[key]) {
         acc[key] = { pnl: 0, totalTax: 0 };
       }
 
-      acc[key].pnl += pnl;
-      acc[key].totalTax += totalTax;
+      // Ensure pnl and totalTax are numbers; use 0 as fallback for NaN
+      const safePnl = Number.isNaN(pnl) ? 0 : pnl;
+      const safeTotalTax = Number.isNaN(totalTax) ? 0 : totalTax;
+
+      // Aggregate values
+      acc[key].pnl += safePnl;
+      acc[key].totalTax += safeTotalTax;
 
       return acc;
     }, {});
+  };
+
+
+  const getDateForSorting = (dateString, filterType) => {
+    if (filterType === 'semaine') {
+      const [year, week] = dateString.split('-S');
+      const startDate = new Date(year, 0, 1); // Start of the year
+      const daysOffset = (parseInt(week, 10) - 1) * 7;
+      return new Date(startDate.setDate(startDate.getDate() + daysOffset));
+    }
+    if (filterType === 'trimestre') {
+      const [year, quarter] = dateString.split('-T');
+      const month = (parseInt(quarter, 10) - 1) * 3;
+      return new Date(year, month, 1);
+    }
+    if (filterType === 'mois') {
+      const [year, month] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, 1); // Month adjusted for zero index
+    }
+    if (filterType === 'anne') {
+      return new Date(`${dateString}-01-01`); // Set to January 1st of the year
+    }
+
+    // For 'jour', assume `DD/MM/YYYY` format, splitting manually
+    const [day, month, year] = dateString.split('/').map(Number);
+    return new Date(year, month - 1, day);
   };
 
   // Example usage
@@ -420,22 +456,7 @@ export default function DashboardAppPage() {
 
     return data;
   }, [pnlByDate, filterType, startDate, endDate]);
-  const getDateForSorting = (dateString, filterType) => {
-    if (filterType === 'semaine') {
-      // Parse 'YYYY-WW' to an approximate date (first day of the week)
-      const [year, week] = dateString.split('-S');
-      const startDate = new Date(year, 0, 1); // Start of the year
-      const daysOffset = (parseInt(week, 10) - 1) * 7; // Added radix 10
-      return new Date(startDate.setDate(startDate.getDate() + daysOffset));
-    }
-    if (filterType === 'trimestre') {
-      // Parse 'YYYY-Q#' to an approximate date (first day of the quarter)
-      const [year, quarter] = dateString.split('-T');
-      const month = (parseInt(quarter, 10) - 1) * 3; // Added radix 10
-      return new Date(year, month, 1); // First day of the quarter
-    }
-    return new Date(dateString); // For 'jour', 'mois', or 'anne'
-  };
+
 
   const chartData = useMemo(() => {
     const sortedDates = Object.keys(filteredPnL).sort((a, b) =>
@@ -482,7 +503,6 @@ export default function DashboardAppPage() {
   };
   const rows = useMemo(() =>
     Object.keys(filteredPnL).map((dateKey, index) => {
-      console.log(dateKey); // This will log dateKey
       return {
         id: index,
         date: dateKey,
@@ -511,7 +531,6 @@ export default function DashboardAppPage() {
     // { field: 'totalTax', headerName: 'Total Tax', width: 150 },
   ];
 
-  console.log(rows)
   return (
     <>
       <Helmet>
