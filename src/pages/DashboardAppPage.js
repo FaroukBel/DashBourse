@@ -2,7 +2,21 @@ import { Helmet } from 'react-helmet-async';
 import { faker } from '@faker-js/faker';
 // @mui
 import { useTheme } from '@mui/material/styles';
-import { Card, Grid, Button, Container, Typography, Stack, TextField, FormControl, InputLabel, Select, MenuItem, Box } from '@mui/material';
+import {
+  Card,
+  Grid,
+  Button,
+  Container,
+  Typography,
+  Stack,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Box,
+  Divider,
+} from '@mui/material';
 import { collection, getDocs } from 'firebase/firestore';
 import { DataGrid } from '@mui/x-data-grid';
 import { useEffect, useMemo, useState } from 'react';
@@ -66,12 +80,11 @@ export default function DashboardAppPage() {
   const [statsData, setStatsData] = useState([]);
   const listTransactionRef = collection(db, 'bank_transactions');
   const listTransactionRefSys = collection(db, 'Transactions');
-  const [chartType, setChartType] = useState("line")
+  const [chartType, setChartType] = useState('line');
   const [groupByTitre, setGroupByTitre] = useState([]);
 
   const getTransactionsList = async () => {
     const transactionSnapshot = await getDocs(listTransactionRef);
-
 
     const transactionListData = transactionSnapshot.docs.map((doc) => {
       const transactionData = doc.data();
@@ -131,8 +144,6 @@ export default function DashboardAppPage() {
     setGroupByTitre(formattedTitleTotalsAchat);
   };
 
-
-
   const getSysTransactionsList = async () => {
     try {
       const listTransactionSys = await getDocs(listTransactionRefSys);
@@ -144,7 +155,9 @@ export default function DashboardAppPage() {
         let transactionDateSys;
         if (transactionDataSys.date && transactionDataSys.date.seconds) {
           // Convert Firestore timestamp object (seconds + nanoseconds) to JavaScript Date
-          transactionDateSys = new Date(transactionDataSys.date.seconds * 1000 + transactionDataSys.date.nanoseconds / 1000000);
+          transactionDateSys = new Date(
+            transactionDataSys.date.seconds * 1000 + transactionDataSys.date.nanoseconds / 1000000
+          );
         } else {
           transactionDateSys = new Date(); // Fallback to current date if the date is missing or in an unexpected format
         }
@@ -167,7 +180,6 @@ export default function DashboardAppPage() {
       console.error('Error fetching system transactions:', error);
     }
   };
-
 
   useEffect(() => {
     getSysTransactionsList();
@@ -242,7 +254,6 @@ export default function DashboardAppPage() {
       return b.quantiteDifference - a.quantiteDifference; // Descending order for non-zero quantite
     });
 
-
     setStatsData(result);
     return result;
   };
@@ -294,10 +305,14 @@ export default function DashboardAppPage() {
   };
 
   // Calculate PnL, total tax, and total tax value by titre
-  const { pnl: pnlByTitre, totalTax: totalTaxByTitre, totalTaxValue: totalTaxValueByTitre } = calculatePnLByTitre(sysTransactions);
+  const {
+    pnl: pnlByTitre,
+    totalTax: totalTaxByTitre,
+    totalTaxValue: totalTaxValueByTitre,
+  } = calculatePnLByTitre(sysTransactions);
 
   // Update your statsData with PnL, difference, tax, and total tax value
-  const updatedStatsData = statsData.map(row => {
+  const updatedStatsData = statsData.map((row) => {
     const pnl = pnlByTitre[row.id] || 0; // Fetch PnL from sysTransactions, default to 0 if not found
     const totalTax = totalTaxByTitre[row.id] || 0; // Fetch total tax from sysTransactions, default to 0 if not found
     const totalTaxValue = totalTaxValueByTitre[row.id] || 0; // Fetch total tax value from sysTransactions, default to 0 if not found
@@ -311,9 +326,6 @@ export default function DashboardAppPage() {
       totalTaxValue, // Add the total tax value column
     };
   });
-
-
-
 
   const formatDateWithoutLeadingZeros = (date) => {
     const day = date.getDate(); // No leading zero
@@ -334,7 +346,6 @@ export default function DashboardAppPage() {
         console.warn('Invalid or missing date:', date);
         return acc;
       }
-
       // Parsing numeric fields with fallback to 0 for NaN cases
       const parsedPrixAchat = parseFloat(prixAchat) || 0;
       const parsedPrixVente = parseFloat(prixVente) || 0;
@@ -344,7 +355,15 @@ export default function DashboardAppPage() {
       // PnL calculation logic
       const achat = parsedPrixAchat * parsedQuantite + parsedQuantite * parsedPrixAchat * parsedTaxValue;
       const vente = parsedPrixVente * parsedQuantite - parsedQuantite * parsedPrixVente * parsedTaxValue;
+      let taxValueAmount = 0;
+      if (parsedTaxValue !== 0) {
+        taxValueAmount =
+          parsedPrixAchat * parsedQuantite * parsedTaxValue + parsedQuantite * parsedPrixVente * parsedTaxValue;
+        // console.log(parsedTaxValue);
+      }
+
       let pnl = vente - achat;
+      const brutPnl = vente - achat;
       let taxAmount = 0;
 
       if (pnl > 0) {
@@ -353,16 +372,17 @@ export default function DashboardAppPage() {
       }
 
       if (!acc[parsedDate]) {
-        acc[parsedDate] = { pnl: 0, totalTax: 0 };
+        acc[parsedDate] = { pnl: 0, totalTax: 0, brutGain: 0, taxValueAmount: 0 };
       }
 
       acc[parsedDate].pnl += pnl;
       acc[parsedDate].totalTax += taxAmount;
+      acc[parsedDate].brutGain = brutPnl;
+      acc[parsedDate].taxValueAmount = taxValueAmount;
 
       return acc;
     }, {});
   };
-
 
   // Example Usage
   const getDateKey = (date, filterType) => {
@@ -387,26 +407,29 @@ export default function DashboardAppPage() {
   };
 
   const aggregatePnL = (pnlByDate, filterType) => {
-    return Object.entries(pnlByDate).reduce((acc, [date, { pnl, totalTax }]) => {
+    return Object.entries(pnlByDate).reduce((acc, [date, { pnl, totalTax, brutGain, taxValueAmount }]) => {
       const key = getDateKey(date, filterType);
 
       // Initialize the accumulation object for the current key if not present
       if (!acc[key]) {
-        acc[key] = { pnl: 0, totalTax: 0 };
+        acc[key] = { pnl: 0, totalTax: 0, brutGain: 0, taxValueAmount: 0 };
       }
 
       // Ensure pnl and totalTax are numbers; use 0 as fallback for NaN
       const safePnl = Number.isNaN(pnl) ? 0 : pnl;
       const safeTotalTax = Number.isNaN(totalTax) ? 0 : totalTax;
+      const safeBrutGain = Number.isNaN(brutGain) ? 0 : brutGain;
+      const safeTaxValueAmount = Number.isNaN(taxValueAmount) ? 0 : taxValueAmount;
 
       // Aggregate values
       acc[key].pnl += safePnl;
       acc[key].totalTax += safeTotalTax;
+      acc[key].brutGain += safeBrutGain;
+      acc[key].taxValueAmount += safeTaxValueAmount;
 
       return acc;
     }, {});
   };
-
 
   const getDateForSorting = (dateString, filterType) => {
     if (filterType === 'semaine') {
@@ -436,6 +459,7 @@ export default function DashboardAppPage() {
   // Example usage
   const [filterType, setFilterType] = useState('mois');
   const pnlByDate = calculatePnLByDate(sysTransactions);
+
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(dayjs(new Date()));
   // Recalculate filtered PnL data when filterType changes
@@ -471,10 +495,9 @@ export default function DashboardAppPage() {
     return data;
   }, [pnlByDate, filterType, startDate, endDate]);
 
-
   const chartData = useMemo(() => {
-    const sortedDates = Object.keys(filteredPnL).sort((a, b) =>
-      getDateForSorting(a, filterType) - getDateForSorting(b, filterType)
+    const sortedDates = Object.keys(filteredPnL).sort(
+      (a, b) => getDateForSorting(a, filterType) - getDateForSorting(b, filterType)
     );
 
     return {
@@ -482,7 +505,7 @@ export default function DashboardAppPage() {
       datasets: [
         {
           label: `PnL - ${filterType.charAt(0).toUpperCase() + filterType.slice(1)}`,
-          data: sortedDates.map(date => filteredPnL[date].pnl),
+          data: sortedDates.map((date) => filteredPnL[date].pnl),
           borderColor: 'rgba(75, 192, 192, 1)',
           borderWidth: 2,
           fill: false,
@@ -499,9 +522,7 @@ export default function DashboardAppPage() {
       x: { title: { display: true, text: 'Période' } },
       y: { title: { display: true, text: 'PnL' } },
     },
-
   };
-
 
   const groupedPnLData = aggregatePnL(pnlByDate, 'monthly'); // Change to 'quarterly' or 'yearly' as needed
 
@@ -510,42 +531,53 @@ export default function DashboardAppPage() {
     datasets: [
       {
         label: 'PnL',
-        data: Object.values(groupedPnLData).map(item => item.pnl),
+        data: Object.values(groupedPnLData).map((item) => item.pnl),
         backgroundColor: 'rgba(75, 192, 192, 0.6)',
       },
     ],
   };
-  const rows = useMemo(() => {
-    return Object.keys(filteredPnL).map((dateKey, index) => {
+  const { rows, totalPnl, totalTax, totalBrutGain, totalTaxValueAmount } = useMemo(() => {
+    let totalPnl = 0;
+    let totalTax = 0;
+    let totalBrutGain = 0;
+    let totalTaxValueAmount = 0;
+
+    const rows = Object.keys(filteredPnL).map((dateKey, index) => {
       let formattedDate;
       let dateObj;
 
       if (filterType === 'jour') {
-        // Format DD/MM/YYYY for daily
         const [day, month, year] = dateKey.split('/').map(Number);
         dateObj = new Date(year, month - 1, day);
         formattedDate = dayjs(dateObj).locale('fr').format('DD/MM/YYYY');
       } else if (filterType === 'mois') {
-        // Format MM/YYYY for monthly
         const [year, month] = dateKey.split('-').map(Number);
         dateObj = new Date(year, month - 1, 1);
         formattedDate = dayjs(dateObj).locale('fr').format('MM/YYYY');
       } else if (filterType === 'anne') {
-        // Format YYYY for yearly
-        dateObj = new Date(dateKey, 0, 1); // Set to Jan 1st of the year
+        dateObj = new Date(dateKey, 0, 1);
         formattedDate = dayjs(dateObj).locale('fr').format('YYYY');
       }
 
+      // Accumulate totals based on filtered data
+      totalPnl += filteredPnL[dateKey].pnl;
+      totalTax += filteredPnL[dateKey].totalTax;
+      totalBrutGain += filteredPnL[dateKey].brutGain;
+      totalTaxValueAmount += filteredPnL[dateKey].taxValueAmount;
+
       return {
         id: index,
-        date: formattedDate, // Displayed date string in French format
-        dateObj, // Date object for sorting
+        date: formattedDate,
+        dateObj,
         pnl: filteredPnL[dateKey].pnl,
         totalTax: filteredPnL[dateKey].totalTax,
+        brutGain: filteredPnL[dateKey].brutGain,
+        taxValueAmount: filteredPnL[dateKey].taxValueAmount,
       };
     });
-  }, [filteredPnL, filterType]);
 
+    return { rows, totalPnl, totalTax, totalBrutGain };
+  }, [filteredPnL, filterType]);
 
   const getDateComparator = (filterType) => (v1, v2) => {
     if (filterType === 'jour') {
@@ -572,7 +604,6 @@ export default function DashboardAppPage() {
     return 0;
   };
 
-
   // DataGrid columns with date sorting
   const columns = [
     {
@@ -580,6 +611,24 @@ export default function DashboardAppPage() {
       headerName: 'Date',
       width: 150,
       sortComparator: getDateComparator(filterType), // Pass the current filterType
+    },
+    {
+      field: 'brutGain',
+      headerName: 'Gain Brut',
+      width: 150,
+      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
+    },
+    {
+      field: 'totalTax',
+      headerName: 'IGR',
+      width: 150,
+      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
+    },
+    {
+      field: 'taxValueAmount',
+      headerName: 'Commission',
+      width: 150,
+      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
     },
     {
       field: 'pnl',
@@ -597,7 +646,6 @@ export default function DashboardAppPage() {
     },
   ];
 
-
   return (
     <>
       <Helmet>
@@ -612,9 +660,7 @@ export default function DashboardAppPage() {
                 padding: '20px',
               }}
             >
-              <Stack direction={"row"} spacing={2}>
-
-
+              <Stack direction={'row'} spacing={2}>
                 <FormControl fullWidth variant="outlined" style={{ marginBottom: '1rem' }}>
                   <InputLabel id="time-period-select-label">Période</InputLabel>
                   <Select
@@ -651,55 +697,90 @@ export default function DashboardAppPage() {
                     renderInput={(params) => <TextField {...params} fullWidth />}
                   />
                 </LocalizationProvider>
-
               </Stack>
-              <Stack direction={"row"}>
-                <Box >
-
-
+              <Stack direction={'column'}>
+                <Box>
                   <DataGrid
                     rows={rows}
                     columns={columns}
                     pageSize={10}
-                    sx={{ height: "500px" }}
+                    sx={{ height: '500px' }}
                     rowsPerPageOptions={[10, 20, 50]}
-
                   />
+                  <Stack direction="row" spacing={2} sx={{ mt: 5 }}>
+                    <Stack direction="column" sx={{ mt: 5 }}>
+                      <Typography variant="h6">Total Gain Brut</Typography>
+                      <TextField
+                        value={formatNumber(totalBrutGain)}
+                        InputProps={{
+                          readOnly: true,
+                        }}
+                        variant="outlined"
+                        sx={{ width: 200 }}
+                      />
+                    </Stack>
+                    {/* <Stack direction="column" sx={{ mt: 5 }}>
+                      <Typography variant="h6">Total Commission</Typography>
+                      <TextField
+                        value={formatNumber(totalTaxValueAmount)}
+                        InputProps={{
+                          readOnly: true,
+                        }}
+                        variant="outlined"
+                        sx={{ width: 200 }}
+                      />
+                    </Stack> */}
+                    <Stack direction="column" sx={{ mt: 5 }}>
+                      <Typography variant="h6">Total IGR</Typography>
+                      <TextField
+                        value={formatNumber(totalTax)}
+                        InputProps={{
+                          readOnly: true,
+                        }}
+                        variant="outlined"
+                        sx={{ width: 200 }}
+                      />
+                    </Stack>
+
+                    <Stack direction="column" sx={{ mt: 5 }}>
+                      <Typography variant="h6">Total +/- Value</Typography>
+                      <TextField
+                        value={formatNumber(totalPnl)}
+                        InputProps={{
+                          readOnly: true,
+                        }}
+                        variant="outlined"
+                        sx={{ width: 200 }}
+                      />
+                    </Stack>
+                  </Stack>
                 </Box>
+                <Divider sx={{ mt: 5, mb: 5 }} />
                 <Box
                   style={{
                     width: '100%',
-                    height: '500px',
+                    height: '700px',
                   }}
                 >
-
-                  {
-                    chartType === "line" ? (
-
-                      <Line data={chartData} options={options} />
-                    ) : (
-
-                      <Bar
-                        data={barChartData}
-                        options={{
-                          scales: {
-                            x: { title: { display: true, text: 'Periode' } },
-                            y: { title: { display: true, text: 'PnL' } },
-                          },
-                          plugins: {
-                            legend: { display: true },
-
-
-                          }
-                        }}
-                      />
-                    )
-                  }
+                  {chartType === 'line' ? (
+                    <Line data={chartData} options={options} />
+                  ) : (
+                    <Bar
+                      data={barChartData}
+                      options={{
+                        scales: {
+                          x: { title: { display: true, text: 'Periode' } },
+                          y: { title: { display: true, text: 'PnL' } },
+                        },
+                        plugins: {
+                          legend: { display: true },
+                        },
+                      }}
+                    />
+                  )}
                 </Box>
               </Stack>
-
             </Card>
-
           </Grid>
           <Grid item xs={12}>
             <Card
@@ -743,7 +824,11 @@ export default function DashboardAppPage() {
                     headerName: 'Total Systeme',
                     width: 300,
                     renderCell: ({ value }) => (
-                      <Typography variant="h6" color={value > 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'} sx={{ textTransform: 'none' }}>
+                      <Typography
+                        variant="h6"
+                        color={value > 0 ? '#019875' : value === 0 ? 'black' : '#e8305f'}
+                        sx={{ textTransform: 'none' }}
+                      >
                         {formatNumber(value)}
                       </Typography>
                     ),
@@ -759,11 +844,13 @@ export default function DashboardAppPage() {
                           value > 1
                             ? '#019875' // Green if value > 1
                             : value >= -1 && value <= 1
-                              ? 'black' // Black if value is between 0 and 1 (inclusive)
-                              : '#e8305f' // Red if value < 0
+                            ? 'black' // Black if value is between 0 and 1 (inclusive)
+                            : '#e8305f' // Red if value < 0
                         }
                         sx={{ textTransform: 'none' }}
-                      >                        {formatNumber(value)}
+                      >
+                        {' '}
+                        {formatNumber(value)}
                       </Typography>
                     ),
                   },
@@ -773,8 +860,6 @@ export default function DashboardAppPage() {
                     width: 300,
                     renderCell: ({ value }) => (
                       <Typography variant="h6" color={'black'} sx={{ textTransform: 'none' }}>
-
-
                         {formatNumber(value)}
                       </Typography>
                     ),
@@ -810,7 +895,6 @@ export default function DashboardAppPage() {
                 <Stack direction="column" sx={{ mt: 5 }}>
                   <Typography variant="h6">Total Difference Qte</Typography>
                   <TextField
-
                     value={-updatedStatsData.reduce((acc, value) => acc + value.quantiteDifference, 0)}
                     InputProps={{
                       readOnly: true,
@@ -833,7 +917,6 @@ export default function DashboardAppPage() {
                   />
                 </Stack>
 
-
                 <Stack direction="column" sx={{ mt: 5 }}>
                   <Typography variant="h6">Total IGR Value</Typography>
                   <TextField
@@ -845,11 +928,9 @@ export default function DashboardAppPage() {
                     sx={{ width: 200 }} // Adjust width as necessary
                   />
                 </Stack>
-
               </Stack>
             </Card>
           </Grid>
-
 
           <Grid item xs={12} md={6} lg={8}>
             <AppConversionRates
