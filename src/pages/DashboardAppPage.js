@@ -576,7 +576,7 @@ export default function DashboardAppPage() {
       };
     });
 
-    return { rows, totalPnl, totalTax, totalBrutGain };
+    return { rows, totalPnl, totalTax, totalBrutGain, totalTaxValueAmount };
   }, [filteredPnL, filterType]);
 
   const getDateComparator = (filterType) => (v1, v2) => {
@@ -615,25 +615,32 @@ export default function DashboardAppPage() {
     {
       field: 'brutGain',
       headerName: 'Gain Brut',
-      width: 150,
-      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
+      width: 300,
+      renderCell: ({ value }) => <Typography
+        variant="h6">{formatNumber(value)}</Typography>,
     },
     {
       field: 'totalTax',
       headerName: 'IGR',
-      width: 150,
-      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
+      width: 300,
+      renderCell: ({ value }) => <Typography
+        color={"error"}
+
+        variant="h6">{formatNumber(value)}</Typography>,
     },
     {
       field: 'taxValueAmount',
       headerName: 'Commission',
-      width: 150,
-      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
+      width: 300,
+      renderCell: ({ value }) => <Typography
+        color={"error"}
+
+        variant="h6">{formatNumber(value)}</Typography>,
     },
     {
       field: 'pnl',
       headerName: '+/-Value',
-      width: 200,
+      width: 300,
       renderCell: ({ value }) => (
         <Typography
           variant="h6"
@@ -704,6 +711,7 @@ export default function DashboardAppPage() {
                     rows={rows}
                     columns={columns}
                     pageSize={10}
+
                     sx={{ height: '500px' }}
                     rowsPerPageOptions={[10, 20, 50]}
                   />
@@ -715,28 +723,35 @@ export default function DashboardAppPage() {
                         InputProps={{
                           readOnly: true,
                         }}
+                        color={"error"}
+
                         variant="outlined"
                         sx={{ width: 200 }}
                       />
                     </Stack>
-                    {/* <Stack direction="column" sx={{ mt: 5 }}>
+                    <Stack direction="column" sx={{ mt: 5 }}>
                       <Typography variant="h6">Total Commission</Typography>
                       <TextField
                         value={formatNumber(totalTaxValueAmount)}
                         InputProps={{
                           readOnly: true,
+                          style: { color: 'red' }, // Directly set text color
+
                         }}
                         variant="outlined"
                         sx={{ width: 200 }}
                       />
-                    </Stack> */}
+                    </Stack>
                     <Stack direction="column" sx={{ mt: 5 }}>
                       <Typography variant="h6">Total IGR</Typography>
                       <TextField
                         value={formatNumber(totalTax)}
                         InputProps={{
                           readOnly: true,
+                          style: { color: 'red' }, // Directly set text color
                         }}
+
+
                         variant="outlined"
                         sx={{ width: 200 }}
                       />
@@ -748,6 +763,12 @@ export default function DashboardAppPage() {
                         value={formatNumber(totalPnl)}
                         InputProps={{
                           readOnly: true,
+                          style: {
+                            color:
+
+                              totalPnl > 0 ? '#019875' : totalPnl === 0 ? 'black' : '#e8305f'
+                          }, // Directly set text color
+
                         }}
                         variant="outlined"
                         sx={{ width: 200 }}
@@ -844,8 +865,8 @@ export default function DashboardAppPage() {
                           value > 1
                             ? '#019875' // Green if value > 1
                             : value >= -1 && value <= 1
-                            ? 'black' // Black if value is between 0 and 1 (inclusive)
-                            : '#e8305f' // Red if value < 0
+                              ? 'black' // Black if value is between 0 and 1 (inclusive)
+                              : '#e8305f' // Red if value < 0
                         }
                         sx={{ textTransform: 'none' }}
                       >
