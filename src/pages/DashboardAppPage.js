@@ -16,6 +16,7 @@ import {
   MenuItem,
   Box,
   Divider,
+  IconButton,
 } from '@mui/material';
 import { collection, getDocs } from 'firebase/firestore';
 import { DataGrid } from '@mui/x-data-grid';
@@ -35,6 +36,7 @@ import {
   BarElement,
 } from 'chart.js';
 import 'dayjs/locale/fr';
+import { BarChart, ShowChart, StackedLineChart } from '@mui/icons-material';
 
 // Register the required components
 import zoomPlugin from 'chartjs-plugin-zoom';
@@ -522,6 +524,15 @@ export default function DashboardAppPage() {
       x: { title: { display: true, text: 'Période' } },
       y: { title: { display: true, text: 'PnL' } },
     },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label(context) {
+            return formatNumber(context.raw); // Using method shorthand
+          },
+        },
+      },
+    },
   };
 
   const groupedPnLData = aggregatePnL(pnlByDate, 'monthly'); // Change to 'quarterly' or 'yearly' as needed
@@ -616,26 +627,27 @@ export default function DashboardAppPage() {
       field: 'brutGain',
       headerName: 'Gain Brut',
       width: 300,
-      renderCell: ({ value }) => <Typography
-        variant="h6">{formatNumber(value)}</Typography>,
+      renderCell: ({ value }) => <Typography variant="h6">{formatNumber(value)}</Typography>,
     },
     {
       field: 'totalTax',
       headerName: 'IGR',
       width: 300,
-      renderCell: ({ value }) => <Typography
-        color={"error"}
-
-        variant="h6">{formatNumber(value)}</Typography>,
+      renderCell: ({ value }) => (
+        <Typography color={'error'} variant="h6">
+          {formatNumber(value)}
+        </Typography>
+      ),
     },
     {
       field: 'taxValueAmount',
       headerName: 'Commission',
       width: 300,
-      renderCell: ({ value }) => <Typography
-        color={"error"}
-
-        variant="h6">{formatNumber(value)}</Typography>,
+      renderCell: ({ value }) => (
+        <Typography color={'error'} variant="h6">
+          {formatNumber(value)}
+        </Typography>
+      ),
     },
     {
       field: 'pnl',
@@ -711,8 +723,15 @@ export default function DashboardAppPage() {
                     rows={rows}
                     columns={columns}
                     pageSize={10}
-
-                    sx={{ height: '500px' }}
+                    sx={{
+                      '& .MuiDataGrid-cell': {
+                        border: '1px solid rgba(200, 200, 200, 1)',
+                      },
+                      '& .MuiDataGrid-row': {
+                        borderBottom: '1px solid rgba(200, 200, 200, 1)',
+                      },
+                      height: '500px',
+                    }}
                     rowsPerPageOptions={[10, 20, 50]}
                   />
                   <Stack direction="row" spacing={2} sx={{ mt: 5 }}>
@@ -723,8 +742,7 @@ export default function DashboardAppPage() {
                         InputProps={{
                           readOnly: true,
                         }}
-                        color={"error"}
-
+                        color={'error'}
                         variant="outlined"
                         sx={{ width: 200 }}
                       />
@@ -736,7 +754,6 @@ export default function DashboardAppPage() {
                         InputProps={{
                           readOnly: true,
                           style: { color: 'red' }, // Directly set text color
-
                         }}
                         variant="outlined"
                         sx={{ width: 200 }}
@@ -750,8 +767,6 @@ export default function DashboardAppPage() {
                           readOnly: true,
                           style: { color: 'red' }, // Directly set text color
                         }}
-
-
                         variant="outlined"
                         sx={{ width: 200 }}
                       />
@@ -764,11 +779,8 @@ export default function DashboardAppPage() {
                         InputProps={{
                           readOnly: true,
                           style: {
-                            color:
-
-                              totalPnl > 0 ? '#019875' : totalPnl === 0 ? 'black' : '#e8305f'
+                            color: totalPnl > 0 ? '#019875' : totalPnl === 0 ? 'black' : '#e8305f',
                           }, // Directly set text color
-
                         }}
                         variant="outlined"
                         sx={{ width: 200 }}
@@ -783,6 +795,34 @@ export default function DashboardAppPage() {
                     height: '700px',
                   }}
                 >
+                  <Stack direction="row" spacing={2} sx={{ mb: 5 }}>
+                    <IconButton
+                      variant="contained"
+                      color="primary"
+                      onClick={() => setChartType('line')}
+                      style={{
+                        backgroundColor: chartType === 'line' ? theme.palette.primary.main : 'transparent',
+                        color: chartType === 'line' ? theme.palette.primary.contrastText : theme.palette.text.primary,
+                        borderRadius: '5px',
+                      }}
+                    >
+                      <ShowChart fontSize={'large'} />
+                      <Typography variant="h6">Line</Typography>
+                    </IconButton>
+                    <IconButton
+                      variant="contained"
+                      color="primary"
+                      onClick={() => setChartType('bar')}
+                      style={{
+                        backgroundColor: chartType === 'bar' ? theme.palette.primary.main : 'transparent',
+                        color: chartType === 'bar' ? theme.palette.primary.contrastText : theme.palette.text.primary,
+                        borderRadius: '5px',
+                      }}
+                    >
+                      <BarChart fontSize={'large'} />
+                      <Typography variant="h6">Bar</Typography>
+                    </IconButton>
+                  </Stack>
                   {chartType === 'line' ? (
                     <Line data={chartData} options={options} />
                   ) : (
@@ -793,7 +833,15 @@ export default function DashboardAppPage() {
                           x: { title: { display: true, text: 'Periode' } },
                           y: { title: { display: true, text: 'PnL' } },
                         },
+
                         plugins: {
+                          tooltip: {
+                            callbacks: {
+                              label(context) {
+                                return formatNumber(context.raw); // Using method shorthand
+                              },
+                            },
+                          },
                           legend: { display: true },
                         },
                       }}
@@ -865,8 +913,8 @@ export default function DashboardAppPage() {
                           value > 1
                             ? '#019875' // Green if value > 1
                             : value >= -1 && value <= 1
-                              ? 'black' // Black if value is between 0 and 1 (inclusive)
-                              : '#e8305f' // Red if value < 0
+                            ? 'black' // Black if value is between 0 and 1 (inclusive)
+                            : '#e8305f' // Red if value < 0
                         }
                         sx={{ textTransform: 'none' }}
                       >
